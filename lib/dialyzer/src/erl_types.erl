@@ -4828,9 +4828,10 @@ from_form({user_type, _Anno, Name, Args}, S, D, L, C) ->
 from_form({type, _Anno, Name, Args}, S, D, L, C) ->
   %% Compatibility: modules compiled before Erlang/OTP 18.0.
   type_from_form(Name, Args, S, D, L, C);
-from_form({opaque, _Anno, Name, {Mod, Args, Rep}}, _S, _D, L, C) ->
+from_form({opaque, _Anno, Name, {_Mod, _Args, Rep}}, _S, _D, L, C) ->
+  {t_nominal(Name, Rep), L, C}.
   %% XXX. To be removed.
-  {t_opaque(Mod, Name, Args, Rep), L, C}.
+  %{t_opaque(Mod, Name, Args, Rep), L, C}.
 
 builtin_type(Name, Type, S, D, L, C) ->
   #from_form{site = Site, mrecs = MR} = S,
