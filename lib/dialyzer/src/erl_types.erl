@@ -4751,8 +4751,10 @@ from_form({type, _Anno, no_return, []}, _S, _D, L, C) ->
 from_form({type, _Anno, node, []}, _S, _D, L, C) ->
   {t_node(), L, C};
 from_form({type, _Anno, nominal, [{atom, _Anno1, Name},Type]}, S, D, L, C) -> 
+  #from_form{site = Site, mrecs = _MR} = S,
+  M = site_module(Site),
   {T, L1, C1} = from_form(Type, S, D, L, C),
-  {t_nominal(Name, T), L1, C1};
+  {t_nominal({M, Name, 0}, T), L1, C1};
 from_form({type, _Anno, none, []}, _S, _D, L, C) ->
   {t_none(), L, C};
 from_form({type, _Anno, nonempty_binary, []}, S, D, L, C) ->
@@ -4828,8 +4830,8 @@ from_form({user_type, _Anno, Name, Args}, S, D, L, C) ->
 from_form({type, _Anno, Name, Args}, S, D, L, C) ->
   %% Compatibility: modules compiled before Erlang/OTP 18.0.
   type_from_form(Name, Args, S, D, L, C);
-from_form({opaque, _Anno, Name, {_Mod, _Args, Rep}}, _S, _D, L, C) ->
-  {t_nominal(Name, Rep), L, C}.
+from_form({opaque, _Anno, Name, {Mod, _Args, Rep}}, _S, _D, L, C) ->
+  {t_nominal({Mod, Name, 1}, Rep), L, C}.
   %% XXX. To be removed.
   %{t_opaque(Mod, Name, Args, Rep), L, C}.
 
@@ -4887,14 +4889,14 @@ type_from_form1(Name, Args, ArgsLen, R, TypeName, TypeNames, Site,
             case Tag of
               type ->
                 recur_limit(Fun, D, L1, TypeName, TypeNames);
+              nominal ->
+                recur_limit(Fun, D, L1, TypeName, TypeNames);
               opaque ->
                 {Rep, L2, C2} = recur_limit(Fun, D, L1, TypeName, TypeNames),
                 Rep1 = choose_opaque_type(Rep, Type),
                 Rep2 = case cannot_have_opaque(Rep1, TypeName, TypeNames) of
                          true -> Rep;
-                         false ->
-                           ArgTypes2 = subst_all_vars_to_any_list(ArgTypes),
-                           t_opaque(Module, Name, ArgTypes2, Rep1)
+                         false -> t_nominal({Module, Name, 1}, Rep1)
                        end,
                 {Rep2, L2, C2}
             end,

@@ -1065,6 +1065,9 @@ function_state({attribute,A,type,{TypeName,TypeDef,Args}}=AST, St) ->
 function_state({attribute,A,opaque,{TypeName,TypeDef,Args}}=AST, St) ->
     St1 = untrack_doc(AST, St),
     type_def(opaque, A, TypeName, TypeDef, Args, St1);
+function_state({attribute,A,nominal,{TypeName,TypeDef,Args}}=AST, St) ->
+    St1 = untrack_doc(AST, St),
+    type_def(opaque, A, TypeName, TypeDef, Args, St1);
 function_state({attribute,A,spec,{Fun,Types}}, St) ->
     spec_decl(A, Fun, Types, St);
 function_state({attribute,_A,doc,_Val}=AST, St) ->
