@@ -4711,7 +4711,7 @@ from_form({type, _Anno, Name, Args}, S, D, L, C) ->
   %% Compatibility: modules compiled before Erlang/OTP 18.0.
   type_from_form(Name, Args, S, D, L, C);
 from_form({opaque, _Anno, Name, {Mod, _Args, Rep}}, _S, _D, L, C) ->
-  {t_nominal({Mod, Name, 1}, Rep), L, C}.
+  {t_nominal({Mod, Name, opaque}, Rep), L, C}.
   %% XXX. To be removed.
   %{t_opaque(Mod, Name, Args, Rep), L, C}.
 
@@ -4776,7 +4776,7 @@ type_from_form1(Name, Args, ArgsLen, R, TypeName, TypeNames, Site,
                 Rep1 = choose_opaque_type(Rep, Type),
                 Rep2 = case cannot_have_opaque(Rep1, TypeName, TypeNames) of
                          true -> Rep;
-                         false -> t_nominal({Module, Name, 1}, Rep1)
+                         false -> t_nominal({Module, Name, opaque}, Rep1)
                        end,
                 {Rep2, L2, C2}
             end,
@@ -4853,7 +4853,7 @@ remote_from_form1(RemMod, Name, Args, ArgsLen, RemDict, RemType, TypeNames,
                 NewRep2 =
                   case cannot_have_opaque(NewRep1, RemType, TypeNames) of
                     true -> NewRep;
-                    false -> t_nominal({Mod, Name, 1}, NewRep1)
+                    false -> t_nominal({Mod, Name, opaque}, NewRep1)
                   end,
                 {NewRep2, L2, C2}
             end,
