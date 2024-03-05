@@ -641,130 +641,10 @@ t_decorate_with_opaque(T1, T2, Opaques) ->
       end
   end.
 
-decorate(Type, ?none, _Opaques) -> Type;
-decorate(?function(Domain, Range), ?function(D, R), Opaques) ->
-  ?function(decorate(Domain, D, Opaques), decorate(Range, R, Opaques));
-decorate(?list(Types, Tail, Size), ?list(Ts, Tl, _Sz), Opaques) ->
-  ?list(decorate(Types, Ts, Opaques), decorate(Tail, Tl, Opaques), Size);
-decorate(?product(Types), ?product(Ts), Opaques) ->
-  ?product(list_decorate(Types, Ts, Opaques));
-decorate(?tuple(_, _, _)=T, ?tuple(?any, _, _), _Opaques) -> T;
-decorate(?tuple(?any, _, _)=T, ?tuple(_, _, _), _Opaques) -> T;
-decorate(?tuple(Types, Arity, Tag), ?tuple(Ts, Arity, _), Opaques) ->
-  ?tuple(list_decorate(Types, Ts, Opaques), Arity, Tag);
-decorate(?tuple_set(List), ?tuple(_, Arity, _) = T, Opaques) ->
-  decorate_tuple_sets(List, [{Arity, [T]}], Opaques);
-decorate(?tuple_set(List), ?tuple_set(L), Opaques) ->
-  decorate_tuple_sets(List, L, Opaques);
-decorate(?nominal(N, S1), ?nominal(_, S2), Opaques) ->
-  ?nominal(N, decorate(S1, S2, Opaques));
-decorate(?nominal_set([?nominal(N1, S1)], Str1), ?nominal_set([?nominal(_, S2)], Str2), Opaques) -> 
-  ?nominal_set([?nominal(N1, decorate(S1, S2, Opaques))], decorate(Str1, Str2, Opaques));
-decorate(?nominal_set([?nominal(_,_) = N1|T1], Str1), ?nominal_set([?nominal(_,_) = N2|T2], Str2), Opaques) -> 
-  t_sup(decorate(?nominal_set(T1, Str1), ?nominal_set(T2, Str2), Opaques), decorate(N1, N2, Opaques));
-decorate(?union(List), T, Opaques) when T =/= ?any ->
-  ?union(L) = force_union(T),
-  union_decorate(List, L, Opaques);
-decorate(T, ?union(L), Opaques) when T =/= ?any ->
-  ?union(List) = force_union(T),
-  union_decorate(List, L, Opaques);
 decorate(Type, ?opaque(_)=T, Opaques) ->
-  decorate_with_opaque(Type, T, Opaques);
+  error({Type, T, Opaques});
 decorate(Type, _T, _Opaques) -> Type.
 
-%% Note: it is important that #opaque.struct is a subtype of the
-%% opaque type.
-decorate_with_opaque(Type, ?opaque(Set2), Opaques) ->
-  case decoration(Set2, Type, Opaques, [], false) of
-    {[], false} -> Type;
-    {List, All} when List =/= [] ->
-      NewType = sup_opaque(List),
-      case All of
-        true -> NewType;
-        false -> t_sup(NewType, Type)
-      end
-  end.
-
-decoration([#opaque{struct = S} = Opaque|OpaqueTypes], Type, Opaques,
-           NewOpaqueTypes0, All) ->
-  IsOpaque = is_opaque_type2(Opaque, Opaques),
-  I = t_inf(Type, S),
-  case not IsOpaque orelse t_is_none(I) of
-    true -> decoration(OpaqueTypes, Type, Opaques, NewOpaqueTypes0, All);
-    false ->
-      NewI = decorate(I, S, Opaques),
-      NewOpaque = combine(NewI, [Opaque]),
-      NewAll = All orelse t_is_equal(I, Type),
-      NewOpaqueTypes = NewOpaque ++ NewOpaqueTypes0,
-      decoration(OpaqueTypes, Type, Opaques, NewOpaqueTypes, NewAll)
-  end;
-decoration([], _Type, _Opaques, NewOpaqueTypes, All) ->
-  {NewOpaqueTypes, All}.
-
--spec list_decorate([erl_type()], [erl_type()], opaques()) -> [erl_type()].
-
-list_decorate(List, L, Opaques) ->
-  [decorate(Elem, E, Opaques) || {Elem, E} <- lists:zip(List, L)].
-
-union_decorate(U1, U2, Opaques) ->
-  Union = union_decorate(U1, U2, Opaques, 0, []),
-  ?untagged_union(A,B,F,I,L,N,T,_,Map) = U1,
-  ?untagged_union(_,_,_,_,_,_,_,Opaque,_) = U2,
-  List = [A,B,F,I,L,N,T,Map],
-  DecList = [Dec ||
-              E <- List,
-              not t_is_none(E),
-              not t_is_none(Dec = decorate(E, Opaque, Opaques))],
-  t_sup([Union|DecList]).
-
-union_decorate([?none|Left1], [_|Left2], Opaques, N, Acc) ->
-  union_decorate(Left1, Left2, Opaques, N, [?none|Acc]);
-union_decorate([T1|Left1], [?none|Left2], Opaques, N, Acc) ->
-  union_decorate(Left1, Left2, Opaques, N+1, [T1|Acc]);
-union_decorate([T1|Left1], [T2|Left2], Opaques, N, Acc) ->
-  union_decorate(Left1, Left2, Opaques, N+1, [decorate(T1, T2, Opaques)|Acc]);
-union_decorate([], [], _Opaques, N, Acc) ->
-  if N =:= 0 -> ?none;
-     N =:= 1 ->
-      [Type] = [T || T <- Acc, T =/= ?none],
-      Type;
-     N >= 2  -> ?union(lists:reverse(Acc))
-  end.
-
-decorate_tuple_sets(List, L, Opaques) ->
-  decorate_tuple_sets(List, L, Opaques, []).
-
-decorate_tuple_sets([{Arity, Tuples}|List], [{Arity, Ts}|L], Opaques, Acc) ->
-  DecTs = decorate_tuples_in_sets(Tuples, Ts, Opaques),
-  decorate_tuple_sets(List, L, Opaques, [{Arity, DecTs}|Acc]);
-decorate_tuple_sets([ArTup|List], L, Opaques, Acc) ->
-  decorate_tuple_sets(List, L, Opaques, [ArTup|Acc]);
-decorate_tuple_sets([], _L, _Opaques, Acc) ->
-  ?tuple_set(lists:reverse(Acc)).
-
-decorate_tuples_in_sets([?tuple(Elements, _, ?any)], Ts, Opaques) ->
-  NewList = [list_decorate(Elements, Es, Opaques) || ?tuple(Es, _, _) <- Ts],
-  case t_sup([t_tuple(Es) || Es <- NewList]) of
-    ?tuple_set([{_Arity, Tuples}]) -> Tuples;
-    ?tuple(_, _, _)=Tuple -> [Tuple]
-  end;
-decorate_tuples_in_sets(Tuples, Ts, Opaques) ->
-  decorate_tuples_in_sets(Tuples, Ts, Opaques, []).
-
-decorate_tuples_in_sets([?tuple(Elements, Arity, Tag1) = T1|Tuples] = L1,
-                        [?tuple(Es, Arity, Tag2)|Ts] = L2, Opaques, Acc) ->
-  if
-    Tag1 < Tag2   -> decorate_tuples_in_sets(Tuples, L2, Opaques, [T1|Acc]);
-    Tag1 > Tag2   -> decorate_tuples_in_sets(L1, Ts, Opaques, Acc);
-    Tag1 == Tag2 ->
-      NewElements = list_decorate(Elements, Es, Opaques),
-      NewAcc = [?tuple(NewElements, Arity, Tag1)|Acc],
-      decorate_tuples_in_sets(Tuples, Ts, Opaques, NewAcc)
-  end;
-decorate_tuples_in_sets([T1|Tuples], L2, Opaques, Acc) ->
-  decorate_tuples_in_sets(Tuples, L2, Opaques, [T1|Acc]);
-decorate_tuples_in_sets([], _L, _Opaques, Acc) ->
-  lists:reverse(Acc).
 
 -spec t_opaque_from_records(type_table()) -> [erl_type()].
 
@@ -4973,9 +4853,7 @@ remote_from_form1(RemMod, Name, Args, ArgsLen, RemDict, RemType, TypeNames,
                 NewRep2 =
                   case cannot_have_opaque(NewRep1, RemType, TypeNames) of
                     true -> NewRep;
-                    false ->
-                      ArgTypes2 = subst_all_vars_to_any_list(ArgTypes),
-                      t_opaque(Mod, Name, ArgTypes2, NewRep1)
+                    false -> t_nominal({Mod, Name, 1}, NewRep1)
                   end,
                 {NewRep2, L2, C2}
             end,
@@ -4988,8 +4866,6 @@ remote_from_form1(RemMod, Name, Args, ArgsLen, RemDict, RemType, TypeNames,
       throw({error, Msg})
   end.
 
-subst_all_vars_to_any_list(Types) ->
-  [subst_all_vars_to_any(Type) || Type <- Types].
 
 %% Opaque types (both local and remote) are problematic when it comes
 %% to the limits (TypeNames, D, and L). The reason is that if any() is
