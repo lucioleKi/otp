@@ -990,6 +990,9 @@ attribute_state({attribute,A,type,{TypeName,TypeDef,Args}}=AST, St) ->
 attribute_state({attribute,A,opaque,{TypeName,TypeDef,Args}}=AST, St) ->
     St1 = untrack_doc(AST, St),
     type_def(opaque, A, TypeName, TypeDef, Args, St1);
+attribute_state({attribute,A,nominal,{TypeName,TypeDef,Args}}=AST, St) ->
+    St1 = untrack_doc(AST, St),
+    type_def(nominal, A, TypeName, TypeDef, Args, St1);
 attribute_state({attribute,A,spec,{Fun,Types}}, St) ->
     spec_decl(A, Fun, Types, St);
 attribute_state({attribute,A,callback,{Fun,Types}}=AST, St) ->
@@ -1067,7 +1070,7 @@ function_state({attribute,A,opaque,{TypeName,TypeDef,Args}}=AST, St) ->
     type_def(opaque, A, TypeName, TypeDef, Args, St1);
 function_state({attribute,A,nominal,{TypeName,TypeDef,Args}}=AST, St) ->
     St1 = untrack_doc(AST, St),
-    type_def(opaque, A, TypeName, TypeDef, Args, St1);
+    type_def(nominal, A, TypeName, TypeDef, Args, St1);
 function_state({attribute,A,spec,{Fun,Types}}, St) ->
     spec_decl(A, Fun, Types, St);
 function_state({attribute,_A,doc,_Val}=AST, St) ->
@@ -3586,6 +3589,8 @@ check_local_opaque_types(St) ->
     #lint{types=Ts, exp_types=ExpTs} = St,
     FoldFun =
         fun(_Type, #typeinfo{attr = type}, AccSt) ->
+                AccSt;
+           (_Type, #typeinfo{attr = nominal, anno = _Anno}, AccSt) ->
                 AccSt;
            (Type, #typeinfo{attr = opaque, anno = Anno}, AccSt) ->
                 case gb_sets:is_element(Type, ExpTs) of
