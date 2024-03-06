@@ -820,7 +820,7 @@ minpos2(X) when X < 1 ->
 minpos2(X) ->
     X.
 
--dialyzer({no_opaque, get_line/1}).
+-dialyzer({no_match, get_line/1}).
 get_line(Node) ->
     case erl_syntax:get_pos(Node) of
 	L when is_integer(L) ->

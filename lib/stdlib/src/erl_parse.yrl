@@ -1323,7 +1323,7 @@ build_typed_attribute({atom,Aa,record},
 		      {typed_record, {atom,_An,RecordName}, RecTuple}) ->
     {attribute,Aa,record,{RecordName,record_tuple(RecTuple)}};
 build_typed_attribute({atom,Aa,Attr},
-                      {type_def, {call,_,{atom,_,TypeName},Args}, Type})
+                      {type_def, {call,_,{_,_,TypeName},Args}, Type})
   when Attr =:= 'type' ; Attr =:= 'opaque' ; Attr =:= 'nominal'->
     lists:foreach(fun({var, A, '_'}) -> ret_err(A, "bad type variable");
                      (_)             -> ok

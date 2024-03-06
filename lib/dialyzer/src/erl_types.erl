@@ -350,7 +350,7 @@
 
 -type file_line()    :: {file:name(), erl_anno:line()}.
 -type record_key()   :: {'record', atom()}.
--type type_key()     :: {'type' | 'opaque', atom(), arity()}.
+-type type_key()     :: {'type' | 'opaque' | 'nominal', atom(), arity()}.
 -type field()        :: {atom(), erl_parse:abstract_expr(), erl_type()}.
 -type record_value() :: {file_line(),
                          [{RecordSize :: non_neg_integer(), [field()]}]}.
@@ -613,158 +613,10 @@ t_find_unknown_opaque(T1, T2, Opaques) ->
 %% The first argument can contain opaque types. The second argument
 %% is assumed to be taken from the contract.
 
-t_decorate_with_opaque(T1, T2, Opaques) ->
-  case
-    Opaques =:= [] orelse t_is_equal(T1, T2) orelse not t_contains_opaque(T2)
-  of
-    true -> T1;
-    false ->
-      T = t_inf(T1, T2),
-      case t_contains_opaque(T) of
-        false -> T1;
-        true ->
-          R = decorate(T1, T, Opaques),
-          ?debug(case catch
-                        not t_is_equal(t_unopaque(R), t_unopaque(T1))
-                        orelse
-                        t_is_equal(T1, T) andalso not t_is_equal(T1, R)
-                 of
-                   false -> ok;
-                   _ ->
-                     io:format("T1 = ~p,\n", [T1]),
-                     io:format("T2 = ~p,\n", [T2]),
-                     io:format("O = ~p,\n", [Opaques]),
-                     io:format("erl_types:t_decorate_with_opaque(T1,T2,O).\n"),
-                     throw({error, "Failed to handle opaque types"})
-                 end),
-          R
-      end
-  end.
+t_decorate_with_opaque(T1, _, _) -> t_unopaque(T1).
 
-decorate(Type, ?none, _Opaques) -> Type;
-decorate(?function(Domain, Range), ?function(D, R), Opaques) ->
-  ?function(decorate(Domain, D, Opaques), decorate(Range, R, Opaques));
-decorate(?list(Types, Tail, Size), ?list(Ts, Tl, _Sz), Opaques) ->
-  ?list(decorate(Types, Ts, Opaques), decorate(Tail, Tl, Opaques), Size);
-decorate(?product(Types), ?product(Ts), Opaques) ->
-  ?product(list_decorate(Types, Ts, Opaques));
-decorate(?tuple(_, _, _)=T, ?tuple(?any, _, _), _Opaques) -> T;
-decorate(?tuple(?any, _, _)=T, ?tuple(_, _, _), _Opaques) -> T;
-decorate(?tuple(Types, Arity, Tag), ?tuple(Ts, Arity, _), Opaques) ->
-  ?tuple(list_decorate(Types, Ts, Opaques), Arity, Tag);
-decorate(?tuple_set(List), ?tuple(_, Arity, _) = T, Opaques) ->
-  decorate_tuple_sets(List, [{Arity, [T]}], Opaques);
-decorate(?tuple_set(List), ?tuple_set(L), Opaques) ->
-  decorate_tuple_sets(List, L, Opaques);
-decorate(?nominal(N, S1), ?nominal(_, S2), Opaques) ->
-  ?nominal(N, decorate(S1, S2, Opaques));
-decorate(?nominal_set([?nominal(N1, S1)], Str1), ?nominal_set([?nominal(_, S2)], Str2), Opaques) -> 
-  ?nominal_set([?nominal(N1, decorate(S1, S2, Opaques))], decorate(Str1, Str2, Opaques));
-decorate(?nominal_set([?nominal(_,_) = N1|T1], Str1), ?nominal_set([?nominal(_,_) = N2|T2], Str2), Opaques) -> 
-  t_sup(decorate(?nominal_set(T1, Str1), ?nominal_set(T2, Str2), Opaques), decorate(N1, N2, Opaques));
-decorate(?union(List), T, Opaques) when T =/= ?any ->
-  ?union(L) = force_union(T),
-  union_decorate(List, L, Opaques);
-decorate(T, ?union(L), Opaques) when T =/= ?any ->
-  ?union(List) = force_union(T),
-  union_decorate(List, L, Opaques);
-decorate(Type, ?opaque(_)=T, Opaques) ->
-  decorate_with_opaque(Type, T, Opaques);
-decorate(Type, _T, _Opaques) -> Type.
 
-%% Note: it is important that #opaque.struct is a subtype of the
-%% opaque type.
-decorate_with_opaque(Type, ?opaque(Set2), Opaques) ->
-  case decoration(Set2, Type, Opaques, [], false) of
-    {[], false} -> Type;
-    {List, All} when List =/= [] ->
-      NewType = sup_opaque(List),
-      case All of
-        true -> NewType;
-        false -> t_sup(NewType, Type)
-      end
-  end.
 
-decoration([#opaque{struct = S} = Opaque|OpaqueTypes], Type, Opaques,
-           NewOpaqueTypes0, All) ->
-  IsOpaque = is_opaque_type2(Opaque, Opaques),
-  I = t_inf(Type, S),
-  case not IsOpaque orelse t_is_none(I) of
-    true -> decoration(OpaqueTypes, Type, Opaques, NewOpaqueTypes0, All);
-    false ->
-      NewI = decorate(I, S, Opaques),
-      NewOpaque = combine(NewI, [Opaque]),
-      NewAll = All orelse t_is_equal(I, Type),
-      NewOpaqueTypes = NewOpaque ++ NewOpaqueTypes0,
-      decoration(OpaqueTypes, Type, Opaques, NewOpaqueTypes, NewAll)
-  end;
-decoration([], _Type, _Opaques, NewOpaqueTypes, All) ->
-  {NewOpaqueTypes, All}.
-
--spec list_decorate([erl_type()], [erl_type()], opaques()) -> [erl_type()].
-
-list_decorate(List, L, Opaques) ->
-  [decorate(Elem, E, Opaques) || {Elem, E} <- lists:zip(List, L)].
-
-union_decorate(U1, U2, Opaques) ->
-  Union = union_decorate(U1, U2, Opaques, 0, []),
-  ?untagged_union(A,B,F,I,L,N,T,_,Map) = U1,
-  ?untagged_union(_,_,_,_,_,_,_,Opaque,_) = U2,
-  List = [A,B,F,I,L,N,T,Map],
-  DecList = [Dec ||
-              E <- List,
-              not t_is_none(E),
-              not t_is_none(Dec = decorate(E, Opaque, Opaques))],
-  t_sup([Union|DecList]).
-
-union_decorate([?none|Left1], [_|Left2], Opaques, N, Acc) ->
-  union_decorate(Left1, Left2, Opaques, N, [?none|Acc]);
-union_decorate([T1|Left1], [?none|Left2], Opaques, N, Acc) ->
-  union_decorate(Left1, Left2, Opaques, N+1, [T1|Acc]);
-union_decorate([T1|Left1], [T2|Left2], Opaques, N, Acc) ->
-  union_decorate(Left1, Left2, Opaques, N+1, [decorate(T1, T2, Opaques)|Acc]);
-union_decorate([], [], _Opaques, N, Acc) ->
-  if N =:= 0 -> ?none;
-     N =:= 1 ->
-      [Type] = [T || T <- Acc, T =/= ?none],
-      Type;
-     N >= 2  -> ?union(lists:reverse(Acc))
-  end.
-
-decorate_tuple_sets(List, L, Opaques) ->
-  decorate_tuple_sets(List, L, Opaques, []).
-
-decorate_tuple_sets([{Arity, Tuples}|List], [{Arity, Ts}|L], Opaques, Acc) ->
-  DecTs = decorate_tuples_in_sets(Tuples, Ts, Opaques),
-  decorate_tuple_sets(List, L, Opaques, [{Arity, DecTs}|Acc]);
-decorate_tuple_sets([ArTup|List], L, Opaques, Acc) ->
-  decorate_tuple_sets(List, L, Opaques, [ArTup|Acc]);
-decorate_tuple_sets([], _L, _Opaques, Acc) ->
-  ?tuple_set(lists:reverse(Acc)).
-
-decorate_tuples_in_sets([?tuple(Elements, _, ?any)], Ts, Opaques) ->
-  NewList = [list_decorate(Elements, Es, Opaques) || ?tuple(Es, _, _) <- Ts],
-  case t_sup([t_tuple(Es) || Es <- NewList]) of
-    ?tuple_set([{_Arity, Tuples}]) -> Tuples;
-    ?tuple(_, _, _)=Tuple -> [Tuple]
-  end;
-decorate_tuples_in_sets(Tuples, Ts, Opaques) ->
-  decorate_tuples_in_sets(Tuples, Ts, Opaques, []).
-
-decorate_tuples_in_sets([?tuple(Elements, Arity, Tag1) = T1|Tuples] = L1,
-                        [?tuple(Es, Arity, Tag2)|Ts] = L2, Opaques, Acc) ->
-  if
-    Tag1 < Tag2   -> decorate_tuples_in_sets(Tuples, L2, Opaques, [T1|Acc]);
-    Tag1 > Tag2   -> decorate_tuples_in_sets(L1, Ts, Opaques, Acc);
-    Tag1 == Tag2 ->
-      NewElements = list_decorate(Elements, Es, Opaques),
-      NewAcc = [?tuple(NewElements, Arity, Tag1)|Acc],
-      decorate_tuples_in_sets(Tuples, Ts, Opaques, NewAcc)
-  end;
-decorate_tuples_in_sets([T1|Tuples], L2, Opaques, Acc) ->
-  decorate_tuples_in_sets(Tuples, L2, Opaques, [T1|Acc]);
-decorate_tuples_in_sets([], _L, _Opaques, Acc) ->
-  lists:reverse(Acc).
 
 -spec t_opaque_from_records(type_table()) -> [erl_type()].
 
@@ -773,6 +625,7 @@ t_opaque_from_records(RecMap) ->
   [begin
      Rep = Any,                      % not used for anything right now
      Args = [Any || _ <- ArgNames],
+     %t_nominal({Module, Name, Opaque}, Rep)
      t_opaque(Module, Name, Args, Rep)
    end || {opaque, Name, _} := {{Module, _, _, ArgNames}, _} <- RecMap].
 
@@ -1377,9 +1230,10 @@ t_is_nil(Type, Opaques) ->
 is_nil(?nil) -> true;
 is_nil(_) -> false.
 
--spec t_nominal(erl_type(), erl_type()) -> erl_type().
+-spec t_nominal(any(), erl_type()) -> erl_type().
 
-t_nominal(Name, Types) -> ?nominal(Name, Types).
+t_nominal(Name, Types) -> 
+  ?nominal(Name, Types).
 
 %-spec t_is_nominal(erl_type()) -> boolean().
 
@@ -4750,11 +4604,6 @@ from_form({type, _Anno, no_return, []}, _S, _D, L, C) ->
   {t_unit(), L, C};
 from_form({type, _Anno, node, []}, _S, _D, L, C) ->
   {t_node(), L, C};
-from_form({type, _Anno, nominal, [{atom, _Anno1, Name},Type]}, S, D, L, C) -> 
-  #from_form{site = Site, mrecs = _MR} = S,
-  M = site_module(Site),
-  {T, L1, C1} = from_form(Type, S, D, L, C),
-  {t_nominal({M, Name, 0}, T), L1, C1};
 from_form({type, _Anno, none, []}, _S, _D, L, C) ->
   {t_none(), L, C};
 from_form({type, _Anno, nonempty_binary, []}, S, D, L, C) ->
@@ -4826,14 +4675,7 @@ from_form({type, _Anno, union, Args}, S, D, L, C) ->
   {Lst, L1, C1} = list_from_form(Args, S, D, L, C),
   {t_sup(Lst), L1, C1};
 from_form({user_type, _Anno, Name, Args}, S, D, L, C) ->
-  type_from_form(Name, Args, S, D, L, C);
-from_form({type, _Anno, Name, Args}, S, D, L, C) ->
-  %% Compatibility: modules compiled before Erlang/OTP 18.0.
-  type_from_form(Name, Args, S, D, L, C);
-from_form({opaque, _Anno, Name, {Mod, _Args, Rep}}, _S, _D, L, C) ->
-  {t_nominal({Mod, Name, 1}, Rep), L, C}.
-  %% XXX. To be removed.
-  %{t_opaque(Mod, Name, Args, Rep), L, C}.
+  type_from_form(Name, Args, S, D, L, C).
 
 builtin_type(Name, Type, S, D, L, C) ->
   #from_form{site = Site, mrecs = MR} = S,
@@ -4870,7 +4712,7 @@ type_from_form1(Name, Args, ArgsLen, R, TypeName, TypeNames, Site,
     {_, {_, _}} when element(1, Site) =:= check ->
       {_ArgTypes, L1, C1} = list_from_form(Args, S, D, L, C),
       {t_any(), L1, C1};
-    {Tag, {{Module, {File,_Location}, Form, ArgNames}, Type}} ->
+    {Tag, {{Module, {File,_Location}, Form, ArgNames}, _Type}} ->
       NewTypeNames = [TypeName|TypeNames],
       S1 = S#from_form{tnames = NewTypeNames},
       {ArgTypes, L1, C1} = list_from_form(Args, S1, D, L, C),
@@ -4890,15 +4732,10 @@ type_from_form1(Name, Args, ArgsLen, R, TypeName, TypeNames, Site,
               type ->
                 recur_limit(Fun, D, L1, TypeName, TypeNames);
               nominal ->
-                recur_limit(Fun, D, L1, TypeName, TypeNames);
-              opaque ->
                 {Rep, L2, C2} = recur_limit(Fun, D, L1, TypeName, TypeNames),
-                Rep1 = choose_opaque_type(Rep, Type),
-                Rep2 = case cannot_have_opaque(Rep1, TypeName, TypeNames) of
-                         true -> Rep;
-                         false -> t_nominal({Module, Name, 1}, Rep1)
-                       end,
-                {Rep2, L2, C2}
+                {t_nominal({Module, Name, transparent}, Rep), L2, C2};
+              opaque ->
+                recur_limit(Fun, D, L1, TypeName, TypeNames)
             end,
           C4 = cache_put(CKey, NewType, L1 - L3, C3),
           {NewType, L3, C4}
@@ -4948,7 +4785,7 @@ remote_from_form1(RemMod, Name, Args, ArgsLen, RemDict, RemType, TypeNames,
     {_, {_, _}} when element(1, Site) =:= check ->
       {_ArgTypes, L1, C1} = list_from_form(Args, S, D, L, C),
       {t_any(), L1, C1};
-    {Tag, {{Mod, {File,_Location}, Form, ArgNames}, Type}} ->
+    {Tag, {{Mod, {File,_Location}, Form, ArgNames}, _Type}} ->
       NewTypeNames = [RemType|TypeNames],
       S1 = S#from_form{tnames = NewTypeNames},
       {ArgTypes, L1, C1} = list_from_form(Args, S1, D, L, C),
@@ -4968,16 +4805,10 @@ remote_from_form1(RemMod, Name, Args, ArgsLen, RemDict, RemType, TypeNames,
               type ->
                 recur_limit(Fun, D, L1, RemType, TypeNames);
               opaque ->
+                recur_limit(Fun, D, L1, RemType, TypeNames);
+              nominal ->
                 {NewRep, L2, C2} = recur_limit(Fun, D, L1, RemType, TypeNames),
-                NewRep1 = choose_opaque_type(NewRep, Type),
-                NewRep2 =
-                  case cannot_have_opaque(NewRep1, RemType, TypeNames) of
-                    true -> NewRep;
-                    false ->
-                      ArgTypes2 = subst_all_vars_to_any_list(ArgTypes),
-                      t_opaque(Mod, Name, ArgTypes2, NewRep1)
-                  end,
-                {NewRep2, L2, C2}
+                {t_nominal({Mod, Name, transparent}, NewRep), L2, C2}
             end,
           C4 = cache_put(CKey, NewType, L1 - L3, C3),
           {NewType, L3, C4}
@@ -4988,27 +4819,7 @@ remote_from_form1(RemMod, Name, Args, ArgsLen, RemDict, RemType, TypeNames,
       throw({error, Msg})
   end.
 
-subst_all_vars_to_any_list(Types) ->
-  [subst_all_vars_to_any(Type) || Type <- Types].
 
-%% Opaque types (both local and remote) are problematic when it comes
-%% to the limits (TypeNames, D, and L). The reason is that if any() is
-%% substituted for a more specialized subtype of an opaque type, the
-%% property stated along with decorate_with_opaque() (the type has to
-%% be a subtype of the declared type) no longer holds.
-%%
-%% The less than perfect remedy: if the opaque type created from a
-%% form is not a subset of the declared type, the declared type is
-%% used instead, effectively bypassing the limits, and potentially
-%% resulting in huge types.
-choose_opaque_type(Type, DeclType) ->
-  case
-    t_is_subtype(subst_all_vars_to_any(Type),
-                 subst_all_vars_to_any(DeclType))
-  of
-    true -> Type;
-    false -> DeclType
-  end.
 
 record_from_form({atom, _, Name}, ModFields, S, D0, L0, C) ->
   #from_form{site = Site, mrecs = MR, tnames = TypeNames} = S,
@@ -5529,25 +5340,25 @@ lookup_record(Tag, Arity, Table) when is_atom(Tag) ->
       error
   end.
 
--spec lookup_type(_, _, _) -> {'type' | 'opaque', type_value()} | 'error'.
+-spec lookup_type(_, _, _) -> {'type' | 'opaque' | 'nominal', type_value()} | 'error'.
 lookup_type(Name, Arity, Table) ->
   case Table of
     #{{type, Name, Arity} := Found} ->
       {type, Found};
     #{{opaque, Name, Arity} := Found} ->
       {opaque, Found};
+    #{{nominal, Name, Arity} := Found} ->
+      {nominal, Found};
     #{} ->
       error
   end.
 
--spec type_is_defined('type' | 'opaque', atom(), arity(), type_table()) ->
+-spec type_is_defined('type' | 'opaque' | 'nominal', atom(), arity(), type_table()) ->
         boolean().
 
 type_is_defined(TypeOrOpaque, Name, Arity, Table) ->
   maps:is_key({TypeOrOpaque, Name, Arity}, Table).
 
-cannot_have_opaque(Type, TypeName, TypeNames) ->
-  t_is_none(Type) orelse is_recursive(TypeName, TypeNames).
 
 is_recursive(TypeName, TypeNames) ->
   lists:member(TypeName, TypeNames).
