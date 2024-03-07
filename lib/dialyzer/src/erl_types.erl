@@ -625,7 +625,6 @@ t_opaque_from_records(RecMap) ->
   [begin
      Rep = Any,                      % not used for anything right now
      Args = [Any || _ <- ArgNames],
-     %t_nominal({Module, Name, Opaque}, Rep)
      t_opaque(Module, Name, Args, Rep)
    end || {opaque, Name, _} := {{Module, _, _, ArgNames}, _} <- RecMap].
 
@@ -4699,7 +4698,7 @@ type_from_form(Name, Args, S, D, L, C) ->
   TypeName = {type, {Module, Name, ArgsLen}},
   case can_unfold_more(TypeName, TypeNames) of
     true ->
-      {R, C1} = lookup_module_types(Module, MR, C),
+      {R, C1} = case lookup_module_types(Module, MR, C) of error -> error({Name, Args}); KK -> KK end,
       type_from_form1(Name, Args, ArgsLen, R, TypeName, TypeNames, Site,
                       S, D, L, C1);
     false ->
@@ -4733,7 +4732,7 @@ type_from_form1(Name, Args, ArgsLen, R, TypeName, TypeNames, Site,
                 recur_limit(Fun, D, L1, TypeName, TypeNames);
               nominal ->
                 {Rep, L2, C2} = recur_limit(Fun, D, L1, TypeName, TypeNames),
-                {t_nominal({Module, Name, transparent}, Rep), L2, C2};
+                {t_nominal({Module, Name, ArgsLen, transparent}, Rep), L2, C2};
               opaque ->
                 recur_limit(Fun, D, L1, TypeName, TypeNames)
             end,
@@ -4808,7 +4807,7 @@ remote_from_form1(RemMod, Name, Args, ArgsLen, RemDict, RemType, TypeNames,
                 recur_limit(Fun, D, L1, RemType, TypeNames);
               nominal ->
                 {NewRep, L2, C2} = recur_limit(Fun, D, L1, RemType, TypeNames),
-                {t_nominal({Mod, Name, transparent}, NewRep), L2, C2}
+                {t_nominal({Mod, Name, ArgsLen, transparent}, NewRep), L2, C2}
             end,
           C4 = cache_put(CKey, NewType, L1 - L3, C3),
           {NewType, L3, C4}
@@ -5584,6 +5583,9 @@ module_type_deps_of_type_defs(TypeTable) ->
   | {record_key(), record_value()}) -> [module()].
 
 module_type_deps_of_entry({{'type', _TypeName, _A}, {{_FromM, _FileLine, AbstractType, _ArgNames}, _}}) ->
+  type_form_to_remote_modules(AbstractType);
+
+module_type_deps_of_entry({{'nominal', _TypeName, _A}, {{_FromM, _FileLine, AbstractType, _ArgNames}, _}}) ->
   type_form_to_remote_modules(AbstractType);
 
 module_type_deps_of_entry({{'opaque', _TypeName, _A}, {{_FromM, _FileLine, AbstractType, _ArgNames}, _}}) ->
