@@ -646,9 +646,9 @@ get_handle(_) ->
 -doc "A literal [query list comprehension](`m:qlc#query_list_comprehension`).".
 -type(query_list_comprehension() :: term()).
 -doc "A [query cursor](`m:qlc#query_cursor`).".
--opaque(query_cursor() :: {qlc_cursor, term()}).
+-nominal(query_cursor() :: {qlc_cursor, term()}).
 -doc "A [query handle](`m:qlc#query_handle`).".
--opaque(query_handle() :: {qlc_handle, term()}).
+-nominal(query_handle() :: {qlc_handle, term()}).
 -type(query_handle_or_list() :: query_handle() | list()).
 -type(answers() :: [answer()]).
 -type(answer() :: term()).

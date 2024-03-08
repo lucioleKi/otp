@@ -1024,7 +1024,7 @@ hash_xof(Type, Data, Length) ->
   hash_xof(Type, Data1, erlang:byte_size(Data1), Length).
 
 -doc(#{title => <<"Internal data types">>,equiv => {type,mac_state,0}}).
--opaque hash_state() :: reference().
+-nominal hash_state() :: reference().
 
 -doc """
 Uses the [3-tuple style](`m:crypto#error_3tup`) for error handling.
@@ -1196,7 +1196,7 @@ Contexts with an internal state that should not be manipulated but passed
 between function calls.
 """.
 -doc(#{title => <<"Internal data types">>}).
--opaque mac_state() :: reference() .
+-nominal mac_state() :: reference() .
 
 -doc """
 Uses the [3-tuple style](`m:crypto#error_3tup`) for error handling.
@@ -1404,7 +1404,7 @@ cipher_info(Type) ->
 %%%================================================================
 
 -doc(#{title => <<"Internal data types">>,equiv => {type,mac_state,0}}).
--opaque crypto_state() :: reference() .
+-nominal crypto_state() :: reference() .
 
 -doc(#{title => <<"Ciphers">>,equiv => {type,crypto_opt,0}}).
 -type crypto_opts() :: boolean()

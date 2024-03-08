@@ -46,7 +46,7 @@
 
 -export_type([olp_ref/0, options/0]).
 
--opaque olp_ref() :: {atom(),pid(),ets:tid()}.
+-nominal olp_ref() :: {atom(),pid(),ets:tid()}.
 
 -type options() :: logger:olp_config().
 

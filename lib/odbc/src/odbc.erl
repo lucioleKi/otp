@@ -81,7 +81,7 @@ See also http://msdn.microsoft.com/
 
 -doc "Opaque reference to an ODBC connection as returnded by connect/2.".
 -doc(#{title => <<"Types used in ODBC application">>}).
--opaque connection_reference() :: pid().
+-nominal connection_reference() :: pid().
 -doc "Name of column in the result set.".
 -doc(#{title => <<"Types used in ODBC application">>}).
 -type col_name()             :: string().

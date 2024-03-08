@@ -236,6 +236,7 @@ get_refined_success_typings(LabelledSCCs, #st{callgraph = Callgraph,
                                                               Callgraph)),
 
       ModState = State#st{callgraph = ModCallgraph},
+      %io:format("~p~n", [Callgraph]),
       case refine_succ_typings(ModulePostorder, ModState) of
         [] ->
           %% No new type information was found. We are done.

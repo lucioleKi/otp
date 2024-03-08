@@ -294,7 +294,7 @@ call(_N, _M, _F, _A, _T) ->
 %% Asynchronous call
 
 -doc "An opaque request identifier. For more information see `send_request/4`.".
--opaque request_id() :: nonempty_improper_list(reference(), reference()).
+-nominal request_id() :: nonempty_improper_list(reference(), reference()).
 -doc """
 An opaque collection of request identifiers (`t:request_id/0`) where each
 request identifier can be associated with a label chosen by the user. For more

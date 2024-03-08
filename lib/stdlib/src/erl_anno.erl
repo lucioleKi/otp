@@ -104,10 +104,10 @@ for manipulating annotations in abstract code.
                     | {'text', string()}.
 
 -ifdef(DEBUG).
--opaque anno() :: [annotation(), ...].
+-nominal anno() :: [annotation(), ...].
 -else.
 -doc "A collection of annotations.".
--opaque anno() :: location() | [annotation(), ...].
+-nominal anno() :: location() | [annotation(), ...].
 -endif.
 -doc """
 The term representing a collection of annotations. It is either a `t:location/0`

@@ -369,7 +369,7 @@ Handle to a connection to a NETCONF server as returned by
 [`session/1-3`](`session/1`), [`open/1,2`](`open/1`), or
 [`only_open/1,2`](`only_open/1`).
 """.
--opaque handle() :: pid().
+-nominal handle() :: pid().
 
 -doc """
 Options `host` and `port` specify the server endpoint to which to connect, and

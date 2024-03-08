@@ -191,7 +191,7 @@
         clear |
         beep.
 -type tty() :: reference().
--opaque state() :: #state{}.
+-nominal state() :: #state{}.
 -export_type([state/0]).
 
 -spec ansi_regexp() -> binary().

@@ -244,7 +244,7 @@ A functional, extendible array. The representation is not documented and is
 subject to change without notice. Notice that arrays cannot be directly compared
 for equality.
 """.
--opaque array(Type) ::
+-nominal array(Type) ::
           #array{default :: Type, elements :: elements(Type)}.
 
 %%

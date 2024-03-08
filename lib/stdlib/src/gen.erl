@@ -72,15 +72,15 @@
 -type server_ref() :: pid() | atom() | {atom(), node()}
                     | {global, term()} | {via, module(), term()}.
 
--opaque reply_tag() :: % As accepted by reply/2
+-nominal reply_tag() :: % As accepted by reply/2
           reference()
         | nonempty_improper_list('alias', reference())
         | nonempty_improper_list(
             nonempty_improper_list('alias', reference()), term()).
 
--opaque request_id() :: reference().
+-nominal request_id() :: reference().
 
--opaque request_id_collection() :: map().
+-nominal request_id_collection() :: map().
 
 -type response_timeout() ::
         0..?MAX_INT_TIMEOUT | 'infinity' | {abs, integer()}.

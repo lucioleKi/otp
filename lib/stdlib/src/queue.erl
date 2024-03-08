@@ -109,7 +109,7 @@ some with more readable but perhaps less understandable aliases.
 %%
 
 -doc "As returned by `new/0`.".
--opaque queue(Item) :: {list(Item), list(Item)}.
+-nominal queue(Item) :: {list(Item), list(Item)}.
 
 -type queue() :: queue(_).
 

@@ -62,7 +62,7 @@ it terminates.
 -export_type([sched_sample/0]).
 
 
--opaque sched_sample() ::
+-nominal sched_sample() ::
           {scheduler_wall_time | scheduler_wall_time_all,
            [{sched_type(), sched_id(), ActiveTime::integer(), TotalTime::integer()}]}.
 

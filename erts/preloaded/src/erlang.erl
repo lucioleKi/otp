@@ -384,18 +384,18 @@ time units:
       | 'micro_seconds'
       | 'nano_seconds'.
 
--opaque prepared_code() :: reference().
+-nominal prepared_code() :: reference().
 -export_type([prepared_code/0]).
 
 -doc """
 An opaque handle identifying a
 [NIF resource object ](erl_nif.md#resource_objects).
 """.
--opaque nif_resource() :: reference().
+-nominal nif_resource() :: reference().
 -export_type([nif_resource/0]).
 
 -doc "An opaque handle identifying a distribution channel.".
--opaque dist_handle() :: atom().
+-nominal dist_handle() :: atom().
 -export_type([dist_handle/0]).
 
 -doc """

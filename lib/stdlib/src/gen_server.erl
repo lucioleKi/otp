@@ -624,7 +624,7 @@ instance.
 """.
 -type from() ::	{Client :: pid(), Tag :: reply_tag()}.
 -doc "A handle that associates a reply to the corresponding request.".
--opaque reply_tag() :: gen:reply_tag().
+-nominal reply_tag() :: gen:reply_tag().
 
 -doc "An opaque request identifier. See `send_request/2` for details.".
 -opaque request_id() :: gen:request_id().
@@ -634,7 +634,7 @@ An opaque collection of request identifiers (`t:request_id/0`) where each
 request identifier can be associated with a label chosen by the user. For more
 information see `reqids_new/0`.
 """.
--opaque request_id_collection() :: gen:request_id_collection().
+-nominal request_id_collection() :: gen:request_id_collection().
 
 -doc """
 Used to set a time limit on how long to wait for a response using either

@@ -1196,7 +1196,7 @@ _Options for protocol level_ [_`udp`:_](`t:level/0`)
 -doc "As returned by [`open/1,2,3,4`](`open/1`) and [`accept/1,2`](`accept/1`).".
 -type socket()          :: ?socket(socket_handle()).
 -doc "An opaque socket handle unique for the socket.".
--opaque socket_handle() :: reference().
+-nominal socket_handle() :: reference().
 
 
 %% Some flags are used for send, others for recv, and yet again

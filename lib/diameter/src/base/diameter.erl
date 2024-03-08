@@ -1771,7 +1771,7 @@ call(SvcName, App, Message) ->
     | {all, [peer_filter()]}
     | {any, [peer_filter()]}.
 
--opaque peer_ref()
+-nominal peer_ref()
    :: pid().
 
 -type eval()

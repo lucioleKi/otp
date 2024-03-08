@@ -273,7 +273,7 @@ The record `zip_file` contains the following fields:
 -type zip_file() :: #zip_file{}.
 
 -doc "As returned by `zip_open/2`.".
--opaque handle() :: pid().
+-nominal handle() :: pid().
 
 -export_type([create_option/0, filename/0, handle/0]).
 

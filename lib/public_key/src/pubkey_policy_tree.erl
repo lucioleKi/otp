@@ -51,7 +51,7 @@
 -type policy_tree_node()   :: {policy_node(), [policy_tree_node()] |
                                [policy_node()]}.
 
--opaque policy_tree()        :: {} | policy_tree_node().
+-nominal policy_tree()        :: {} | policy_tree_node().
 
 %%%===================================================================
 %%% Internal API
