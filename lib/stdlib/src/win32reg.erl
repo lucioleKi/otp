@@ -130,7 +130,7 @@ Programmer's Reference (from Microsoft)
 
 %% Basic types internal to this file.
 -doc "As returned by `open/1`.".
--opaque reg_handle() :: {'win32reg',port()}.
+-nominal reg_handle() :: {'win32reg',port()}.
 -type name()       :: string() | 'default'.
 -type value()      :: string() | integer() | binary().
 

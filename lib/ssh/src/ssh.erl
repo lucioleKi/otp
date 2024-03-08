@@ -175,9 +175,9 @@ The directory could be changed with the option
 
 %%% "Deprecated" types export:
 -export_type([ssh_daemon_ref/0, ssh_connection_ref/0, ssh_channel_id/0]).
--opaque ssh_daemon_ref()     :: daemon_ref().
--opaque ssh_connection_ref() :: connection_ref().
--opaque ssh_channel_id()     :: channel_id().
+-nominal ssh_daemon_ref()     :: daemon_ref().
+-nominal ssh_connection_ref() :: connection_ref().
+-nominal ssh_channel_id()     :: channel_id().
 
 
 %%% Type exports
@@ -210,7 +210,7 @@ Opaque data type representing a daemon.
 Returned by the functions [`daemon/1,2,3`](`daemon/1`).
 """.
 -doc(#{title => <<"Other data types">>}).
--opaque daemon_ref()         :: pid() .
+-nominal daemon_ref()         :: pid() .
 -doc """
 Opaque data type representing a channel inside a connection.
 
@@ -218,7 +218,7 @@ Returned by the functions
 [ssh_connection:session_channel/2,4](`ssh_connection:session_channel/2`).
 """.
 -doc(#{title => <<"Other data types">>}).
--opaque channel_id()     :: non_neg_integer().
+-nominal channel_id()     :: non_neg_integer().
 -doc """
 Opaque data type representing a connection between a client and a server
 (daemon).

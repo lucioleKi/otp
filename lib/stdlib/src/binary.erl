@@ -47,7 +47,7 @@ Opaque data type representing a compiled search pattern. Guaranteed to be a
 `t:tuple/0` to allow programs to distinguish it from non-precompiled search
 patterns.
 """.
--opaque cp() :: {'am' | 'bm', reference()}.
+-nominal cp() :: {'am' | 'bm', reference()}.
 -doc """
 A representation of a part (or range) in a binary. `Start` is a zero-based
 offset into a `t:binary/0` and `Length` is the length of that part. As input to

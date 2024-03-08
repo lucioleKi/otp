@@ -356,7 +356,7 @@ common reasons.
 
 -define(PREPARED, '$prepared$').
 -doc "An opaque term holding prepared code.".
--opaque prepared_code() ::
+-nominal prepared_code() ::
 	  {?PREPARED,[{module(),{binary(),string(),_}}]}.
 
 

@@ -164,7 +164,7 @@ done
 %% Time is in milliseconds.
 %%
 -doc "A timer reference.".
--opaque tref() :: {type(), reference()}.
+-nominal tref() :: {type(), reference()}.
 -type type()   :: 'once' | 'interval' | 'instant' | 'send_local'.
 -doc "Time in milliseconds.".
 -type time()   :: non_neg_integer().
