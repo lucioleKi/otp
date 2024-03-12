@@ -174,7 +174,7 @@ the process itself to format these events.
                       | {'terminate', Reason :: _, State :: _}
                       | term().
 -doc "See the introduction of this manual page.".
--opaque dbg_opt()    :: {'trace', 'true'}
+-nominal dbg_opt()    :: {'trace', 'true'}
                       | {'log',
                          {N :: non_neg_integer(),
                           [{Event :: system_event(),

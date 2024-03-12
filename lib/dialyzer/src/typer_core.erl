@@ -119,7 +119,7 @@ run(Opts) ->
 
 %%--------------------------------------------------------------------
 
--spec extract(analysis(), files()) -> analysis().
+%-spec extract(analysis(), files()) -> analysis().
 
 extract(#analysis{macros = Macros,
                   includes = Includes,

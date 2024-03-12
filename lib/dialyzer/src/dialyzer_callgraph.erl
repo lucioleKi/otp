@@ -94,7 +94,7 @@
 
 %% Exported Types
 
--opaque callgraph() :: #callgraph{}.
+-nominal callgraph() :: #callgraph{}.
 
 -type active_digraph() :: {'d', digraph:graph()}
                         | {'e',

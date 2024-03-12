@@ -1380,6 +1380,8 @@ t_widen_to_number(?map(Pairs, DefK, DefV)) ->
   t_map(L, t_widen_to_number(DefK), t_widen_to_number(DefV));
 t_widen_to_number(?nil) -> ?nil;
 t_widen_to_number(?number(_Set, _Tag)) -> t_number();
+t_widen_to_number(?nominal(_, S)) -> t_widen_to_number(S);
+t_widen_to_number(?nominal_set(N, S)) -> ?nominal_set([t_widen_to_number(Nom) || Nom <- N], t_widen_to_number(S));
 t_widen_to_number(?opaque(Set)) ->
   L = [Opaque#opaque{struct = t_widen_to_number(S)} ||
         #opaque{struct = S} = Opaque <- Set],
@@ -4376,7 +4378,7 @@ mod_name(Mod, Name) ->
          mod_recs = #{} :: mod_records()
         }).
 
--opaque cache() :: #cache{}.
+-nominal cache() :: #cache{}.
 
 -spec t_from_form(parse_form(), exported_type_table(), site(), mod_type_table(),
                   var_table(), cache()) -> {erl_type(), cache()}.

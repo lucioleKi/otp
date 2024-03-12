@@ -500,7 +500,7 @@ An opaque collection of request identifiers (`t:request_id/0`) where each
 request identifier can be associated with a label chosen by the user. For more
 information see `reqids_new/0`.
 """.
--opaque request_id_collection() :: gen:request_id_collection().
+-nominal request_id_collection() :: gen:request_id_collection().
 
 -doc """
 Used to set a time limit on how long to wait for a response using either

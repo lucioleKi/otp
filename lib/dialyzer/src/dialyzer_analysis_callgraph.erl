@@ -327,12 +327,12 @@ compile_and_store(Files, #analysis_state{codeserver = CServer,
   send_log(Parent, Msg2),
   {Callgraph, ModCallDeps, Modules, CServer2}.
 
--opaque compile_init_data()  :: #compile_init{}.
+-nominal compile_init_data()  :: #compile_init{}.
 -type error_reason()         :: string().
 -opaque compile_result()     :: {[{file:filename(), error_reason()}],
                                  [module()]}.
 -type one_file_mid_error()   :: {error, error_reason()}.
--opaque one_file_result_ok() :: {ok, [dialyzer_callgraph:callgraph_edge()],
+-nominal one_file_result_ok() :: {ok, [dialyzer_callgraph:callgraph_edge()],
                                  [mfa_or_funlbl()], module()}.
 -type one_file_result()      :: one_file_mid_error() |
                                 one_file_result_ok().

@@ -21,7 +21,7 @@
 
 -export_type([worker/0]).
 
--opaque worker() :: pid().
+-nominal worker() :: pid().
 
 -type mode()        :: dialyzer_coordinator:mode().
 -type coordinator() :: dialyzer_coordinator:coordinator().

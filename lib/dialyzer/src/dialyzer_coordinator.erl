@@ -42,7 +42,7 @@
 -type regulator()  :: pid().
 -type job_labels_to_pid() :: ets:tid() | 'none'.
 
--opaque coordinator() :: {collector(), regulator(), job_labels_to_pid()}.
+-nominal coordinator() :: {collector(), regulator(), job_labels_to_pid()}.
 -type timing() :: dialyzer_timing:timing_server().
 
 -type scc()     :: [mfa_or_funlbl()].
