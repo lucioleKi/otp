@@ -38,9 +38,9 @@ scheme can be replaced by defining a new callback module implementing this API.
 -doc "A key to an entry in the session cache.".
 -type session_cache_key() :: {partial_key(), ssl:session_id()}.
 -doc "The session data that is stored for each session.".
--opaque session()         :: #session{}.
+-nominal session()         :: #session{}.
 -doc "The opaque part of the key. Does not need to be handled by the callback.".
--opaque partial_key()     :: {ssl:host(), inet:port_number()} | inet:port_number().
+-nominal partial_key()     :: {ssl:host(), inet:port_number()} | inet:port_number().
 
 -doc """
 Includes property `{role, client | server}`. Currently this is the only

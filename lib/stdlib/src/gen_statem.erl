@@ -450,7 +450,7 @@ Destination to use when replying through, for example, the `t:action/0`
 -type from() ::
 	{To :: pid(), Tag :: reply_tag()}. % Reply-to specifier for call
 -doc "A handle that associates a reply to the corresponding request.".
--opaque reply_tag() :: gen:reply_tag().
+-nominal reply_tag() :: gen:reply_tag().
 
 -doc """
 If the [_callback mode_](`t:callback_mode/0`) is `handle_event_function`, the
@@ -1067,7 +1067,7 @@ An opaque collection of request identifiers (`t:request_id/0`) where each
 request identifier can be associated with a label chosen by the user. For more
 information see `reqids_new/0`.
 """.
--opaque request_id_collection() :: gen:request_id_collection().
+-nominal request_id_collection() :: gen:request_id_collection().
 
 -doc """
 Used to set a time limit on how long to wait for a response using either

@@ -263,6 +263,7 @@ get_next_core_label(#codeserver{next_core_label = NCL}) ->
 -spec set_next_core_label(label(), codeserver()) -> codeserver().
 
 set_next_core_label(NCL, CS) ->
+  io:format("~p~n", [NCL]),
   CS#codeserver{next_core_label = NCL}.
 
 -spec lookup_mod_records(atom(), codeserver()) -> types().

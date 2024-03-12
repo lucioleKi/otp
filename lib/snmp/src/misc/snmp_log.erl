@@ -65,7 +65,7 @@
 %% Types
 %%-----------------------------------------------------------------
 
--opaque log() :: #snmp_log{}.
+-nominal log() :: #snmp_log{}.
 -type log_time() :: null | 
                     calendar:datetime() | 
                     {local_time,     calendar:datetime()} |

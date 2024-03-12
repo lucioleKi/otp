@@ -108,7 +108,7 @@ get_next_pid(Oid, SnmpIndex) ->
 -define(bad_get(A),   ?badarg(get, A)).
 
 -doc "This type denotes an snmp index structure.".
--opaque index()     :: #tab{}.
+-nominal index()     :: #tab{}.
 -doc """
 This type is used when creating the index structure, and the `t:key/0` type is
 used when inserting and deleting items from the structure.

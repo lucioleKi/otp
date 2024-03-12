@@ -254,10 +254,10 @@ in the Standard Library.
 
 -type gb_set_node(Element) :: 'nil' | {Element, _, _}.
 -doc "A general balanced set.".
--opaque set(Element) :: {non_neg_integer(), gb_set_node(Element)}.
+-nominal set(Element) :: {non_neg_integer(), gb_set_node(Element)}.
 -type set() :: set(_).
 -doc "A general balanced set iterator.".
--opaque iter(Element) :: {ordered | reversed, [gb_set_node(Element)]}.
+-nominal iter(Element) :: {ordered | reversed, [gb_set_node(Element)]}.
 -type iter() :: iter(_).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

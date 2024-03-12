@@ -64,7 +64,7 @@ Consumed by:
 - [`maps:map/2`](`map/2`)
 - [`maps:to_list/1`](`to_list/1`)
 """.
--opaque iterator(Key, Value) :: {Key, Value, iterator(Key, Value)} | none
+-nominal iterator(Key, Value) :: {Key, Value, iterator(Key, Value)} | none
                               | nonempty_improper_list(integer(), #{Key => Value})
                               | nonempty_improper_list(list(Key), #{Key => Value}).
 

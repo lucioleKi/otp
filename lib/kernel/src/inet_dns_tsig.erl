@@ -68,7 +68,7 @@
     mac   = {?MODULE,undefined} ::
       {?MODULE,undefined | binary()} | {crypto,crypto:mac_state()}
 }).
--opaque tsig_state() :: #tsig_state{}.
+-nominal tsig_state() :: #tsig_state{}.
 -export_type([tsig_state/0]).
 
 -spec init(proplists:proplist()) -> tsig_state().

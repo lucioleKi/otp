@@ -77,7 +77,7 @@ logged items in the log file, as the opened index file was truncated by
 	}).
 
 -doc "Continuation returned by `open/1,2` or `chunk/1,2`.".
--opaque continuation() :: #wrap_reader{}.
+-nominal continuation() :: #wrap_reader{}.
 
 %%
 %%  Exported functions

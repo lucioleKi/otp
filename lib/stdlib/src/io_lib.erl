@@ -108,7 +108,7 @@ used for flattening deep lists.
 -type depth() :: -1 | non_neg_integer().
 
 -doc "A continuation as returned by `fread/3`.".
--opaque continuation() :: {Format :: string(),
+-nominal continuation() :: {Format :: string(),
                            Stack :: chars(),
                            Nchars :: non_neg_integer(),
                            Results :: [term()]}.

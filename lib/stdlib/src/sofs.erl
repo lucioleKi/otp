@@ -426,7 +426,7 @@ When comparing external sets, operator `==/2` is used.
 -doc "A [family](`m:sofs#family`) (of subsets).".
 -type(family() :: a_function()).
 -doc "An [ordered set](`m:sofs#sets_definition`).".
--opaque(ordset() :: #?ORDTAG{}).
+-nominal(ordset() :: #?ORDTAG{}).
 -doc "An [n-ary relation](`m:sofs#n_ary_relation`).".
 -type(relation() :: a_set()).
 -doc "An [unordered set](`m:sofs#sets_definition`).".

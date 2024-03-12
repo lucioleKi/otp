@@ -203,10 +203,10 @@ should also be OK.
 -type gb_tree_node(K, V) :: 'nil'
                           | {K, V, gb_tree_node(K, V), gb_tree_node(K, V)}.
 -doc "A general balanced tree.".
--opaque tree(Key, Value) :: {non_neg_integer(), gb_tree_node(Key, Value)}.
+-nominal tree(Key, Value) :: {non_neg_integer(), gb_tree_node(Key, Value)}.
 -type tree() :: tree(_, _).
 -doc "A general balanced tree iterator.".
--opaque iter(Key, Value) :: {ordered | reversed, [gb_tree_node(Key, Value)]}.
+-nominal iter(Key, Value) :: {ordered | reversed, [gb_tree_node(Key, Value)]}.
 -type iter() :: iter(_, _).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

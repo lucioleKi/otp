@@ -86,7 +86,7 @@ one file called `index`, and report files `1, 2, ...`.
 %%-----------------------------------------------------------------
 
 -doc "Term to be sent to `gen_event:add_handler/3`.".
--opaque args() :: {file:filename(), b(), f(), pred()}.
+-nominal args() :: {file:filename(), b(), f(), pred()}.
 
 
 -doc(#{equiv => init/4}).

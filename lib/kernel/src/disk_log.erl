@@ -199,7 +199,7 @@ Nothing is said about whether the disk log files exist or not.
 Chunk continuation returned by `chunk/2,3`, `bchunk/2,3`, or
 [`chunk_step/3`](`chunk_step/3`).
 """.
--opaque continuation() :: #continuation{}.
+-nominal continuation() :: #continuation{}.
 
 -type file_error()     :: term().  % XXX: refine
 -type invalid_header() :: term().  % XXX: refine

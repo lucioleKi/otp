@@ -132,7 +132,7 @@
 %%-----------------------------------------------------------------
 -type config() :: [{atom(),term()}].
 -type cb_state() :: term().
--opaque ct_data() :: #ct_data{}.
+-nominal ct_data() :: #ct_data{}.
 -export_type([ct_data/0]).
 
 -callback upgrade_init(ct_data(),cb_state()) -> cb_state().

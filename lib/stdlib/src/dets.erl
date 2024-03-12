@@ -248,9 +248,9 @@ message.
 -define(PROFILE(C), void).
 
 -doc "Opaque continuation used by `match/1` and `match/3`.".
--opaque bindings_cont() :: #dets_cont{}.
+-nominal bindings_cont() :: #dets_cont{}.
 -doc "Opaque continuation used by `bchunk/2`.".
--opaque cont()    :: #dets_cont{}.
+-nominal cont()    :: #dets_cont{}.
 -doc """
 Match specifications, see section
 [Match Specification in Erlang](`e:erts:match_spec.md`) in ERTS User's Guide and
@@ -259,11 +259,11 @@ the `m:ms_transform` module.
 -type match_spec()  :: ets:match_spec().
 -type object()    :: tuple().
 -doc "Opaque continuation used by `match_object/1` and `match_object/3`.".
--opaque object_cont() :: #dets_cont{}.
+-nominal object_cont() :: #dets_cont{}.
 -doc "For a description of patterns, see `ets:match/2`.".
 -type pattern()   :: atom() | tuple().
 -doc "Opaque continuation used by `select/1` and `select/3`.".
--opaque select_cont() :: #dets_cont{}.
+-nominal select_cont() :: #dets_cont{}.
 
 %%% Some further debug code was added in R12B-1 (stdlib-1.15.1):
 %%% - there is a new open_file() option 'debug';

@@ -289,7 +289,7 @@ string(String, {Line,Column}, Options) when ?STRING(String),
 -type cont_fun() :: fun((char_spec(), #erl_scan{},
                          erl_anno:line(), erl_anno:column(),
                          tokens(), any()) -> any()).
--opaque return_cont() :: {erl_scan_continuation,
+-nominal return_cont() :: {erl_scan_continuation,
                           string(), erl_anno:column(), tokens(),
                           erl_anno:line(),
                           #erl_scan{}, any(), cont_fun()}.
