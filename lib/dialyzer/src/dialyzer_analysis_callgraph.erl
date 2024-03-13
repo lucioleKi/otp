@@ -331,6 +331,10 @@ compile_and_store(Files, #analysis_state{codeserver = CServer,
 -type error_reason()         :: string().
 -opaque compile_result()     :: {[{file:filename(), error_reason()}],
                                  [module()]}.
+% dialyzer_analysis_callgraph.erl:82:9: The created fun has no local return
+% dialyzer_analysis_callgraph.erl:118:1: Function analysis_start/3 has no local return
+% dialyzer_analysis_callgraph.erl:170:1: Function remote_type_postprocessing/2 will never be called
+
 -type one_file_mid_error()   :: {error, error_reason()}.
 -nominal one_file_result_ok() :: {ok, [dialyzer_callgraph:callgraph_edge()],
                                  [mfa_or_funlbl()], module()}.

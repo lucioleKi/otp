@@ -973,6 +973,7 @@ rec_nodes(Name, [{N,R} | Tail], Badnodes, Replies) ->
 
 -doc "Opaque value returned by `async_call/4`.".
 -opaque key() :: erpc:request_id().
+%Same last 3 errors with erpc:request_id_collection()
 
 -doc """
 Implements _call streams with promises_, a type of RPC that does not suspend the
@@ -1017,6 +1018,38 @@ async_call(Node, Mod, Fun, Args) ->
         error:{erpc, badarg} ->
             error(badarg)
     end.
+
+% rpc.erl:1006:2: Invalid type specification for function rpc:async_call/4.
+%  The success typing is rpc:async_call
+%           (atom(),
+%           atom() | fun(() -> any()),
+%           _,
+%           [any()] | #{reference() => [any()]}) ->
+%              #{reference() => [any()]}
+%  But the spec is rpc:async_call
+%           (Node, Module, Function, Args) -> Key
+%              when
+%                  Node :: node(),
+%                  Module :: module(),
+%                  Function :: atom(),
+%                  Args :: [term()],
+%                  Key :: key()
+%  The return types do not overlap
+% rpc.erl:1097:12: The call rpc:yield
+%          (K :: #{reference() => [any()]}) breaks the contract 
+%           (Key) -> Res | {'badrpc', Reason}
+%              when Key :: key(), Res :: term(), Reason :: term()
+% rpc.erl:1131:1: The pattern 
+%          <[{'badrpc', _} | _],
+%           _> can never match the type 
+%          <[],
+%           []>
+% rpc.erl:1132:1: The pattern 
+%          <[X | T],
+%           Ack> can never match the type 
+%          <[],
+%           []>
+
 
 -doc """
 Returns the promised answer from a previous `async_call/4`. If the answer is

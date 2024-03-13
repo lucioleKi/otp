@@ -300,6 +300,7 @@
 	    qualifier = ?unknown_qual :: qual()}).
 
 -opaque erl_type() :: ?any | ?none | ?unit | #c{}.
+% Infinite loop
 
 %%-----------------------------------------------------------------------------
 %% Auxiliary types and convenient macros
@@ -2531,6 +2532,7 @@ normalize_nominal_set(_, ?any, _) ->
   ?any;
 normalize_nominal_set([], Other, []) ->
   Other;
+normalize_nominal_set([], ?none, [?nominal(_,_) = N]) -> N;
 normalize_nominal_set([], Other, Nominals) ->
   ?nominal_set(lists:reverse(Nominals), Other);
 normalize_nominal_set([?nominal(_,_)=Type | Types], ?none, Nominals) ->

@@ -1060,7 +1060,7 @@ version of `gen_statem`.
 	 NewData :: DataType}.
 
 -doc "An opaque request identifier. See `send_request/2` for details.".
--opaque request_id() :: gen:request_id().
+-nominal request_id() :: gen:request_id().
 
 -doc """
 An opaque collection of request identifiers (`t:request_id/0`) where each

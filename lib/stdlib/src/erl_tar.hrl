@@ -163,7 +163,7 @@
           pos = 0 :: non_neg_integer(),
           func :: file_op()
          }).
--opaque tar_descriptor() :: #reader{}.
+-nominal tar_descriptor() :: #reader{}.
 -export_type([tar_descriptor/0]).
 
 %% A reader for a regular file within the tar archive,
