@@ -1237,10 +1237,10 @@ t_nominal(_, ?any) ->
 t_nominal(Name, Types) -> 
   ?nominal(Name, Types).
 
--spec t_is_nominal(erl_type()) -> boolean().
+%-spec t_is_nominal(erl_type()) -> boolean().
 
-t_is_nominal(?nominal_set([{erpc, request_id_collection, 0, transparent}, _],_)) -> true;
-t_is_nominal(_) -> false. 
+% t_is_nominal(?nominal(_,_)) -> true;
+% t_is_nominal(_) -> false. 
 
 -spec t_list() -> erl_type().
 
@@ -2441,17 +2441,18 @@ t_sup(?map(_, ADefK, ADefV) = A, ?map(_, BDefK, BDefV) = B) ->
   t_map(Pairs, t_sup(ADefK, BDefK), t_sup(ADefV, BDefV));
 %% Union of 1 or more nominal types/nominal sets
 t_sup(?nominal(Name,S1), ?nominal(Name,S2)) ->
-  false = t_is_nominal(?nominal(Name, t_sup(S1, S2))),
   ?nominal(Name, t_sup(S1, S2));
 t_sup(?nominal(N1, S1)=T1, ?nominal(N2, S2)=T2) ->
   Sup1 = t_sup(T1, S2),
   Sup2 = t_sup(T2, S1),
   case {Sup1, Sup2} of
+    {?any, _} ->
+      ?any;
+    {_, ?any} ->
+      ?any;
     {?nominal(_, _), _} ->
-      false = t_is_nominal(?nominal(N1, t_sup(S1, S2))),
       ?nominal(N1, t_sup(S1, S2));
     {_, ?nominal(_, _)} ->
-      false = t_is_nominal(?nominal(N2, t_sup(S1, S2))),
       ?nominal(N2, t_sup(S1, S2));
     {_, _} ->
       if
@@ -2469,14 +2470,12 @@ t_sup(?nominal(_,S1)=T1, S2) ->
   Inf = t_inf(S1, S2),
   case t_is_none_or_unit(Inf) of
     true -> 
-      false = t_is_nominal(?nominal_set([T1],S2)),
       ?nominal_set([T1],S2);
     false -> t_sup(S1, S2)
   end;
 t_sup(S1, ?nominal(_,_)=T2) ->
   t_sup(T2,S1);
 t_sup(?nominal_set(N1,S1),S2) ->
-  false = t_is_nominal(normalize_nominal_set(N1, t_sup(S1,S2), [])),
   normalize_nominal_set(N1, t_sup(S1,S2), []);
 t_sup(S,?nominal_set(_,_)=T2) ->
   t_sup(T2,S);
@@ -2534,6 +2533,8 @@ sup_nominal_sets_1([], []) ->
   [].
 
 normalize_nominal_set(_, ?any, _) ->
+  ?any;
+normalize_nominal_set([?any | _], _, _) ->
   ?any;
 normalize_nominal_set([], Other, []) ->
   Other;
@@ -2799,13 +2800,11 @@ t_inf(?map(_, ADefK, ADefV) = A, ?map(_, BDefK, BDefV) = B, _Opaques) ->
 t_inf(?nominal_set(LHS_Ns, LHS_S),?nominal_set(RHS_Ns, RHS_S), Opaques) ->
   inf_nominal_sets(LHS_Ns, RHS_Ns, t_inf(LHS_S, RHS_S, Opaques), Opaques);
 t_inf(?nominal_set(LHS_Ns, LHS_S), ?nominal(_, _)=RHS, Opaques) ->
-  false = t_is_nominal(inf_nominal_sets(LHS_Ns, [RHS], LHS_S, Opaques)),
   inf_nominal_sets(LHS_Ns, [RHS], LHS_S, Opaques);
 t_inf(?nominal(_, _)=LHS, ?nominal_set(_, _)=RHS, Opaques) ->
   t_inf(RHS, LHS, Opaques);
 t_inf(?nominal_set(LHS_Ns, LHS_S), RHS, Opaques) ->
   Ns = [t_inf(T, RHS, Opaques) || T <- LHS_Ns],
-  false = t_is_nominal(normalize_nominal_set(Ns, t_inf(LHS_S, RHS, Opaques), [])),
   normalize_nominal_set(Ns, t_inf(LHS_S, RHS, Opaques), []);
 t_inf(LHS, ?nominal_set(_, _)=RHS, Opaques) ->
   t_inf(RHS, LHS, Opaques);
@@ -2814,13 +2813,11 @@ t_inf(?nominal(Same, LHS_S), ?nominal(Same, RHS_S), Opaques) ->
   case t_is_none_or_unit(Inf) of
     true -> ?none;
     false -> 
-      false = t_is_nominal(?nominal(Same, Inf)),
       ?nominal(Same, Inf)
   end;
 t_inf(?nominal(LHS_Name, ?nominal(L_N, _)=L_I),
       ?nominal(RHS_Name, ?nominal(R_N, _)=R_I), Opaques) ->
   Inf = t_inf(L_I, R_I, Opaques),
-  false = t_is_nominal(Inf),
   case t_is_none_or_unit(Inf) of
     true ->
       ?none;
@@ -2832,10 +2829,8 @@ t_inf(?nominal(LHS_Name, ?nominal(L_N, _)=L_I),
         ?nominal(LHS_Name, _) -> Inf;
         ?nominal(RHS_Name, _) -> Inf;
         ?nominal(L_N, _) -> 
-          false = t_is_nominal(?nominal(LHS_Name, Inf)),
           ?nominal(LHS_Name, Inf);
         ?nominal(R_N, _) -> 
-          false = t_is_nominal(?nominal(RHS_Name, Inf)),
           ?nominal(RHS_Name, Inf);
         _ -> ?none
       end
@@ -3098,10 +3093,16 @@ t_inf_lists_strict([T1|Left1], [T2|Left2], Acc, Opaques) ->
 t_inf_lists_strict([], [], Acc, _Opaques) ->
   lists:reverse(Acc).
 
+inf_nominal_sets(Left, Right, ?none, Opaques) ->
+  case inf_nominal_sets_1(Left, Right, Opaques) of
+    [?nominal(_,_) = N] -> N;
+    [_|_]=Ns -> 
+      ?nominal_set(Ns, ?none);
+    [] -> ?none
+  end;
 inf_nominal_sets(Left, Right, Other, Opaques) ->
   case inf_nominal_sets_1(Left, Right, Opaques) of
     [_|_]=Ns -> 
-      false = t_is_nominal(?nominal_set(Ns, Other)),
       ?nominal_set(Ns, Other);
     [] -> Other
   end.
@@ -3109,8 +3110,6 @@ inf_nominal_sets(Left, Right, Other, Opaques) ->
 inf_nominal_sets_1([?nominal(Same, _) = LHS | Left],
                    [?nominal(Same, _) = RHS | Right],
                    Opaques) ->
-                    %false = t_is_nominal(LHS),
-                    %false = t_is_nominal(RHS),
   case t_inf(LHS, RHS, Opaques) of
     ?nominal(_, _) = Inf -> [Inf | inf_nominal_sets_1(Left, Right, Opaques)];
     ?none -> inf_nominal_sets_1(Left, Right, Opaques)
@@ -3618,9 +3617,7 @@ t_subtract(?nominal(Name, S1), S2) ->
   Sub = t_subtract(S1, S2),
   case t_is_none_or_unit(Sub) of
     true -> ?none;
-    false -> 
-      false = t_is_nominal(?nominal(Name, Sub)),
-      ?nominal(Name, Sub)
+    false -> ?nominal(Name, Sub)
   end;
 t_subtract(S1, ?nominal(_, _)) -> S1;
 t_subtract(?number(_, _), ?number(?any, ?unknown_qual)) -> ?none;
@@ -3809,7 +3806,6 @@ subtract_union([], [], Type, Acc) ->
 
 subtract_nominal_sets([], Str1, _, Str2, []) -> t_subtract(Str1, Str2);
 subtract_nominal_sets([], Str1, _, Str2, Acc) -> 
-  false = t_is_nominal(?nominal_set(lists:reverse(Acc), t_subtract(Str1, Str2))),
   ?nominal_set(lists:reverse(Acc), t_subtract(Str1, Str2));
 subtract_nominal_sets([?nominal(Name, S1)|Ts1], Str1, [], Str2, Acc) -> 
   Sub = t_subtract(S1, Str2),
@@ -3826,7 +3822,6 @@ subtract_nominal_sets([?nominal(Name, S1)|Ts1], Str1, [?nominal(Name, S2)|Ts2], 
   end;
 subtract_nominal_sets([?nominal(Name1, S1)|Ts1] = L1, Str1, [?nominal(Name2, _)|Ts2] = L2, Str2, Acc) ->
   Sub = t_subtract(S1, Str2),
-  false = t_is_nominal(?nominal(Name1, Sub)),
   if Name1 < Name2 ->
       case t_is_none_or_unit(Sub) of
         true -> subtract_nominal_sets(Ts1, Str1, L2, Str2, Acc);
@@ -4048,11 +4043,17 @@ t_limit_k(?opaque(Es), K) ->
             Opaque#opaque{struct = NewS}
           end || #opaque{struct = S} = Opaque <- Es],
   ?opaque(ordsets:from_list(List));
-t_limit_k(?nominal(N, S), _K) ->
-  false = t_is_nominal(?nominal(N, S)),
-  ?nominal(N, S);
-t_limit_k(?nominal_set(Elements, S), _K) ->
-  ?nominal_set(Elements, S);
+t_limit_k(?nominal(_, ?any), _K) -> ?any;
+t_limit_k(?nominal(N, S), K) ->
+  case t_limit_k(S, K - 1) of
+    ?any -> ?any;
+    ?nominal(_, ?any) -> ?any;
+    _ -> ?nominal(N, t_limit_k(S, K - 1))
+  end;
+t_limit_k(?nominal_set(Elements, S), K) ->
+  normalize_nominal_set([t_limit_k(X, K - 1) || X <- Elements],
+                         t_limit_k(S, K - 1),
+                         []);
 t_limit_k(?map(Pairs0, DefK0, DefV0), K) ->
   Fun = fun({EK, MNess, EV}, {Exact, DefK1, DefV1}) ->
 	    LV = t_limit_k(EV, K - 1),

@@ -267,7 +267,7 @@ Opaque continuation used by [`select/1,3`](`select/1`),
                        | {table(),_,_,integer(),compiled_match_spec(),list(),integer(),integer()}.
 
 -doc "A table identifier, as returned by `new/2`.".
--nominal tid()         :: reference().
+-opaque tid()         :: reference().
 
 -type match_pattern() :: atom() | tuple().
 -doc "A match specification, see [Match Specifications](`m:ets#match_spec`).".

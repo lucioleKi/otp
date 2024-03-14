@@ -300,7 +300,7 @@ An opaque collection of request identifiers (`t:request_id/0`) where each
 request identifier can be associated with a label chosen by the user. For more
 information see `reqids_new/0`.
 """.
--opaque request_id_collection() :: #{ reference() => [reference() | term()] }.
+-nominal request_id_collection() :: #{ reference() => [reference() | term()] }.
 % Errors starts in rpc.erl line 1006
 
 -doc """
