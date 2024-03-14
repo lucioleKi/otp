@@ -1019,22 +1019,6 @@ async_call(Node, Mod, Fun, Args) ->
             error(badarg)
     end.
 
-% rpc.erl:1006:2: Invalid type specification for function rpc:async_call/4.
-%  The success typing is rpc:async_call
-%           (atom(),
-%           atom() | fun(() -> any()),
-%           _,
-%           [any()] | #{reference() => [any()]}) ->
-%              #{reference() => [any()]}
-%  But the spec is rpc:async_call
-%           (Node, Module, Function, Args) -> Key
-%              when
-%                  Node :: node(),
-%                  Module :: module(),
-%                  Function :: atom(),
-%                  Args :: [term()],
-%                  Key :: key()
-%  The return types do not overlap
 % rpc.erl:1097:12: The call rpc:yield
 %          (K :: #{reference() => [any()]}) breaks the contract 
 %           (Key) -> Res | {'badrpc', Reason}

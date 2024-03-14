@@ -431,7 +431,6 @@ When comparing external sets, operator `==/2` is used.
 -type(relation() :: a_set()).
 -doc "An [unordered set](`m:sofs#sets_definition`).".
 -opaque(a_set() :: #?TAG{}).
-% Infinite loop
 -doc "An [unordered set](`m:sofs#sets_definition`) of unordered sets.".
 -type(set_of_sets() :: a_set()).
 -doc "A [SetFun](`m:sofs#set_fun`).".
