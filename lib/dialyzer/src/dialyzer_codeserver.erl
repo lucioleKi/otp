@@ -94,7 +94,7 @@
 		     temp_callbacks      :: 'clean' | map_ets()
 		    }).
 
--nominal codeserver() :: #codeserver{}.
+-opaque codeserver() :: #codeserver{}.
 
 %%--------------------------------------------------------------------
 

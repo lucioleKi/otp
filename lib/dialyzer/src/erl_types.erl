@@ -4043,13 +4043,13 @@ t_limit_k(?opaque(Es), K) ->
             Opaque#opaque{struct = NewS}
           end || #opaque{struct = S} = Opaque <- Es],
   ?opaque(ordsets:from_list(List));
-t_limit_k(?nominal(_, ?any), _K) -> ?any;
-t_limit_k(?nominal(N, S), K) ->
-  case t_limit_k(S, K - 1) of
-    ?any -> ?any;
-    ?nominal(_, ?any) -> ?any;
-    _ -> ?nominal(N, t_limit_k(S, K - 1))
+t_limit_k(?nominal(N, ?nominal(_, _)=S0), K) ->
+  case t_limit_k(S0, K - 1) of
+      ?nominal(_, _)=S -> ?nominal(N, S);
+      _ -> ?any 
   end;
+t_limit_k(?nominal(N, S), K) ->
+  ?nominal(N, t_limit_k(S, K - 1));
 t_limit_k(?nominal_set(Elements, S), K) ->
   normalize_nominal_set([t_limit_k(X, K - 1) || X <- Elements],
                          t_limit_k(S, K - 1),
@@ -4389,7 +4389,7 @@ mod_name(Mod, Name) ->
          mod_recs = #{} :: mod_records()
         }).
 
--nominal cache() :: #cache{}.
+-opaque cache() :: #cache{}.
 
 -spec t_from_form(parse_form(), exported_type_table(), site(), mod_type_table(),
                   var_table(), cache()) -> {erl_type(), cache()}.

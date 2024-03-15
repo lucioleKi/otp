@@ -101,7 +101,7 @@ directed graphs is used here.
 	          cyclic = true  :: boolean()}).
 
 -doc "A digraph as returned by [`new/0,1`](`new/0`).".
--nominal graph() :: #digraph{}.
+-opaque graph() :: #digraph{}.
 
 -doc """
 Serves as the identifier or "name" of an edge. This is distinct from an edge

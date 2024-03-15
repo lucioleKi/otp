@@ -113,7 +113,7 @@ otherwise function `find`.
 -type dict() :: dict(_, _).
 
 -doc "Dictionary as returned by `new/0`.".
--nominal dict(Key, Value) :: #dict{segs :: segs(Key, Value)}.
+-opaque dict(Key, Value) :: #dict{segs :: segs(Key, Value)}.
 
 -define(kv(K,V), [K|V]).			% Key-Value pair format
 %%-define(kv(K,V), {K,V}).			% Key-Value pair format

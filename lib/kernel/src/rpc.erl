@@ -972,7 +972,7 @@ rec_nodes(Name, [{N,R} | Tail], Badnodes, Replies) ->
 %% it returns a Key that can be used in a subsequent yield(Key).
 
 -doc "Opaque value returned by `async_call/4`.".
--nominal key() :: erpc:request_id().
+-opaque key() :: erpc:request_id().
 %Same last 3 errors with erpc:request_id_collection()
 
 -doc """
