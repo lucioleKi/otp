@@ -1383,8 +1383,8 @@ t_widen_to_number(?map(Pairs, DefK, DefV)) ->
   t_map(L, t_widen_to_number(DefK), t_widen_to_number(DefV));
 t_widen_to_number(?nil) -> ?nil;
 t_widen_to_number(?number(_Set, _Tag)) -> t_number();
-t_widen_to_number(?nominal(_, S)) -> t_widen_to_number(S);
-t_widen_to_number(?nominal_set(N, S)) -> ?nominal_set([t_widen_to_number(Nom) || Nom <- N], t_widen_to_number(S));
+t_widen_to_number(?nominal(N, S)) -> ?nominal(N, t_widen_to_number(S));
+t_widen_to_number(?nominal_set(N, S)) -> normalize_nominal_set([t_widen_to_number(Nom) || Nom <- N], t_widen_to_number(S), []);
 t_widen_to_number(?opaque(Set)) ->
   L = [Opaque#opaque{struct = t_widen_to_number(S)} ||
         #opaque{struct = S} = Opaque <- Set],
@@ -2100,6 +2100,10 @@ t_has_var(?list(Contents, ?nil, _)) ->
   t_has_var(Contents);
 t_has_var(?list(Contents, Termination, _)) ->
   t_has_var(Contents) orelse t_has_var(Termination);
+t_has_var(?nominal(_, S)) ->
+  t_has_var(S);
+t_has_var(?nominal_set(N, S)) ->
+  lists:any(fun t_has_var/1, N) andalso t_has_var(S);
 t_has_var(?product(Types)) -> t_has_var_list(Types);
 t_has_var(?tuple(?any, ?any, ?any)) -> false;
 t_has_var(?tuple(Elements, _, _)) ->
@@ -2148,6 +2152,10 @@ t_collect_var_names(?tuple_set(_) = TS, Acc) ->
 t_collect_var_names(?map(_, DefK, _) = Map, Acc0) ->
   Acc = t_collect_vars_list(map_all_values(Map), Acc0),
   t_collect_var_names(DefK, Acc);
+t_collect_var_names(?nominal(_, S), Acc) ->
+  t_collect_var_names(S, Acc);
+t_collect_var_names(?nominal_set(N, S), Acc) ->
+  t_collect_vars_list(N, t_collect_var_names(S, Acc));
 t_collect_var_names(?opaque(Set), Acc) ->
   t_collect_vars_list([O#opaque.struct || O <- Set], Acc);
 t_collect_var_names(?union(List), Acc) ->
@@ -2342,36 +2350,41 @@ t_sup1([], Type) ->
 
 -spec t_sup(erl_type(), erl_type()) -> erl_type().
 
-t_sup(?any, _) -> ?any;
-t_sup(_, ?any) -> ?any;
-t_sup(?none, T) -> T;
-t_sup(T, ?none) -> T;
-t_sup(?unit, T) -> T;
-t_sup(T, ?unit) -> T;
-t_sup(T, T) -> do_not_subst_all_vars_to_any(T);
-t_sup(?var(_), _) -> ?any;
-t_sup(_, ?var(_)) -> ?any;
-t_sup(?atom(Set1), ?atom(Set2)) ->
+t_sup(T1, T2) -> 
+  Res = t_sup_aux(T1, T2),
+  {true, true, _, _, _} = {t_is_subtype(subst_all_vars_to_any(T1), Res), t_is_subtype(subst_all_vars_to_any(T2), Res), T1, T2, Res},
+  Res.
+
+t_sup_aux(?any, _) -> ?any;
+t_sup_aux(_, ?any) -> ?any;
+t_sup_aux(?none, T) -> T;
+t_sup_aux(T, ?none) -> T;
+t_sup_aux(?unit, T) -> T;
+t_sup_aux(T, ?unit) -> T;
+t_sup_aux(T, T) -> do_not_subst_all_vars_to_any(T);
+t_sup_aux(?var(_), _) -> ?any;
+t_sup_aux(_, ?var(_)) -> ?any;
+t_sup_aux(?atom(Set1), ?atom(Set2)) ->
   ?atom(set_union(Set1, Set2));
-t_sup(?bitstr(U1, B1), ?bitstr(U2, B2)) ->
+t_sup_aux(?bitstr(U1, B1), ?bitstr(U2, B2)) ->
   t_bitstr(gcd(gcd(U1, U2), abs(B1-B2)), lists:min([B1, B2]));
-t_sup(?function(Domain1, Range1), ?function(Domain2, Range2)) ->
+t_sup_aux(?function(Domain1, Range1), ?function(Domain2, Range2)) ->
   %% The domain is either a product or any.
-  ?function(t_sup(Domain1, Domain2), t_sup(Range1, Range2));
-t_sup(?identifier(Set1), ?identifier(Set2)) ->
+  ?function(t_sup_aux(Domain1, Domain2), t_sup_aux(Range1, Range2));
+t_sup_aux(?identifier(Set1), ?identifier(Set2)) ->
   ?identifier(set_union(Set1, Set2));
-t_sup(?opaque(Set1), ?opaque(Set2)) ->
+t_sup_aux(?opaque(Set1), ?opaque(Set2)) ->
   sup_opaque(ordsets:union(Set1, Set2));
 %%Disallow unions with opaque types
-%%t_sup(T1=?opaque(_,_,_), T2) ->
-%%  io:format("Debug: t_sup executed with args ~w and ~w~n",[T1, T2]), ?none;
-%%t_sup(T1, T2=?opaque(_,_,_)) ->
-%%  io:format("Debug: t_sup executed with args ~w and ~w~n",[T1, T2]), ?none;
-t_sup(?nil, ?list(Contents, Termination, _)) ->
-  ?list(Contents, t_sup(?nil, Termination), ?unknown_qual);
-t_sup(?list(Contents, Termination, _), ?nil) ->
-  ?list(Contents, t_sup(?nil, Termination), ?unknown_qual);
-t_sup(?list(Contents1, Termination1, Size1),
+%%t_sup_aux(T1=?opaque(_,_,_), T2) ->
+%%  io:format("Debug: t_sup_aux executed with args ~w and ~w~n",[T1, T2]), ?none;
+%%t_sup_aux(T1, T2=?opaque(_,_,_)) ->
+%%  io:format("Debug: t_sup_aux executed with args ~w and ~w~n",[T1, T2]), ?none;
+t_sup_aux(?nil, ?list(Contents, Termination, _)) ->
+  ?list(Contents, t_sup_aux(?nil, Termination), ?unknown_qual);
+t_sup_aux(?list(Contents, Termination, _), ?nil) ->
+  ?list(Contents, t_sup_aux(?nil, Termination), ?unknown_qual);
+t_sup_aux(?list(Contents1, Termination1, Size1),
       ?list(Contents2, Termination2, Size2)) ->
   NewSize =
     case {Size1, Size2} of
@@ -2380,43 +2393,43 @@ t_sup(?list(Contents1, Termination1, Size1),
       {?nonempty_qual, ?unknown_qual} -> ?unknown_qual;
       {?nonempty_qual, ?nonempty_qual} -> ?nonempty_qual
     end,
-  NewContents = t_sup(Contents1, Contents2),
-  NewTermination = t_sup(Termination1, Termination2),
+  NewContents = t_sup_aux(Contents1, Contents2),
+  NewTermination = t_sup_aux(Termination1, Termination2),
   ?list(NewContents, NewTermination, NewSize);
-t_sup(?number(_, _), ?number(?any, ?unknown_qual) = T) -> T;
-t_sup(?number(?any, ?unknown_qual) = T, ?number(_, _)) -> T;
-t_sup(?float, ?integer(_)) -> t_number();
-t_sup(?integer(_), ?float) -> t_number();
-t_sup(?integer(?any) = T, ?integer(_)) -> T;
-t_sup(?integer(_), ?integer(?any) = T) -> T;
-t_sup(?int_set(Set1), ?int_set(Set2)) ->
+t_sup_aux(?number(_, _), ?number(?any, ?unknown_qual) = T) -> T;
+t_sup_aux(?number(?any, ?unknown_qual) = T, ?number(_, _)) -> T;
+t_sup_aux(?float, ?integer(_)) -> t_number();
+t_sup_aux(?integer(_), ?float) -> t_number();
+t_sup_aux(?integer(?any) = T, ?integer(_)) -> T;
+t_sup_aux(?integer(_), ?integer(?any) = T) -> T;
+t_sup_aux(?int_set(Set1), ?int_set(Set2)) ->
   case set_union(Set1, Set2) of
     ?any ->
       t_from_range(min(set_min(Set1), set_min(Set2)),
 		   max(set_max(Set1), set_max(Set2)));
     Set -> ?int_set(Set)
   end;
-t_sup(?int_range(From1, To1), ?int_range(From2, To2)) ->
+t_sup_aux(?int_range(From1, To1), ?int_range(From2, To2)) ->
   t_from_range(min(From1, From2), max(To1, To2));
-t_sup(Range = ?int_range(_, _), ?int_set(Set)) ->
+t_sup_aux(Range = ?int_range(_, _), ?int_set(Set)) ->
   expand_range_from_set(Range, Set);
-t_sup(?int_set(Set), Range = ?int_range(_, _)) ->
+t_sup_aux(?int_set(Set), Range = ?int_range(_, _)) ->
   expand_range_from_set(Range, Set);
-t_sup(?product(Types1), ?product(Types2)) ->
+t_sup_aux(?product(Types1), ?product(Types2)) ->
   L1 = length(Types1),
   L2 = length(Types2),
   if L1 =:= L2 -> ?product(t_sup_lists(Types1, Types2));
      true -> ?any
   end;
-t_sup(?product(_), _) ->
+t_sup_aux(?product(_), _) ->
   ?any;
-t_sup(_, ?product(_)) ->
+t_sup_aux(_, ?product(_)) ->
   ?any;
-t_sup(?tuple(?any, ?any, ?any) = T, ?tuple(_, _, _)) -> T;
-t_sup(?tuple(_, _, _), ?tuple(?any, ?any, ?any) = T) -> T;
-t_sup(?tuple(?any, ?any, ?any) = T, ?tuple_set(_)) -> T;
-t_sup(?tuple_set(_), ?tuple(?any, ?any, ?any) = T) -> T;
-t_sup(?tuple(Elements1, Arity, Tag1) = T1,
+t_sup_aux(?tuple(?any, ?any, ?any) = T, ?tuple(_, _, _)) -> T;
+t_sup_aux(?tuple(_, _, _), ?tuple(?any, ?any, ?any) = T) -> T;
+t_sup_aux(?tuple(?any, ?any, ?any) = T, ?tuple_set(_)) -> T;
+t_sup_aux(?tuple_set(_), ?tuple(?any, ?any, ?any) = T) -> T;
+t_sup_aux(?tuple(Elements1, Arity, Tag1) = T1,
       ?tuple(Elements2, Arity, Tag2) = T2) ->
   if Tag1 == Tag2 -> t_tuple(t_sup_lists(Elements1, Elements2));
      Tag1 == ?any -> t_tuple(t_sup_lists(Elements1, Elements2));
@@ -2424,62 +2437,70 @@ t_sup(?tuple(Elements1, Arity, Tag1) = T1,
      Tag1 < Tag2 -> ?tuple_set([{Arity, [T1, T2]}]);
      Tag1 > Tag2 -> ?tuple_set([{Arity, [T2, T1]}])
   end;
-t_sup(?tuple(_, Arity1, _) = T1, ?tuple(_, Arity2, _) = T2) ->
+t_sup_aux(?tuple(_, Arity1, _) = T1, ?tuple(_, Arity2, _) = T2) ->
   sup_tuple_sets([{Arity1, [T1]}], [{Arity2, [T2]}]);
-t_sup(?tuple_set(List1), ?tuple_set(List2)) ->
+t_sup_aux(?tuple_set(List1), ?tuple_set(List2)) ->
   sup_tuple_sets(List1, List2);
-t_sup(?tuple_set(List1), T2 = ?tuple(_, Arity, _)) ->
+t_sup_aux(?tuple_set(List1), T2 = ?tuple(_, Arity, _)) ->
   sup_tuple_sets(List1, [{Arity, [T2]}]);
-t_sup(?tuple(_, Arity, _) = T1, ?tuple_set(List2)) ->
+t_sup_aux(?tuple(_, Arity, _) = T1, ?tuple_set(List2)) ->
   sup_tuple_sets([{Arity, [T1]}], List2);
-t_sup(?map(_, ADefK, ADefV) = A, ?map(_, BDefK, BDefV) = B) ->
+t_sup_aux(?map(_, ADefK, ADefV) = A, ?map(_, BDefK, BDefV) = B) ->
   Pairs =
     map_pairwise_merge(
-      fun(K, MNess, V1, MNess, V2) -> {K, MNess, t_sup(V1, V2)};
-	 (K, _,     V1, _,     V2) -> {K, ?opt,  t_sup(V1, V2)}
+      fun(K, MNess, V1, MNess, V2) -> {K, MNess, t_sup_aux(V1, V2)};
+	 (K, _,     V1, _,     V2) -> {K, ?opt,  t_sup_aux(V1, V2)}
       end, A, B),
-  t_map(Pairs, t_sup(ADefK, BDefK), t_sup(ADefV, BDefV));
+  t_map(Pairs, t_sup_aux(ADefK, BDefK), t_sup_aux(ADefV, BDefV));
 %% Union of 1 or more nominal types/nominal sets
-t_sup(?nominal(Name,S1), ?nominal(Name,S2)) ->
-  ?nominal(Name, t_sup(S1, S2));
-t_sup(?nominal(N1, S1)=T1, ?nominal(N2, S2)=T2) ->
-  Sup1 = t_sup(T1, S2),
-  Sup2 = t_sup(T2, S1),
-  case {Sup1, Sup2} of
-    {?any, _} ->
-      ?any;
-    {_, ?any} ->
-      ?any;
-    {?nominal(_, _), _} ->
-      ?nominal(N1, t_sup(S1, S2));
-    {_, ?nominal(_, _)} ->
-      ?nominal(N2, t_sup(S1, S2));
-    {_, _} ->
+t_sup_aux(?nominal(Name,?nominal(_,_) = S1), ?nominal(Name,S2)) ->
+  case t_sup_aux(S1, S2) of
+      ?nominal_set(_, _)=S -> ?nominal(Name, S);
+      ?nominal(_, _)=S -> ?nominal(Name, S);
+      S -> S 
+  end;
+t_sup_aux(?nominal(Name,?nominal_set(_,_) = S1), ?nominal(Name,S2)) ->
+  case t_sup_aux(S1, S2) of
+      ?nominal_set(_, _)=S -> ?nominal(Name, S);
+      ?nominal(_, _)=S -> ?nominal(Name, S);
+      S -> S 
+  end;
+t_sup_aux(?nominal(Name,_) = T1, ?nominal(Name,?nominal(_,_)) = T2) ->
+  t_sup_aux(T2, T1);
+t_sup_aux(?nominal(Name,_) = T1, ?nominal(Name,?nominal_set(_,_)) = T2) ->
+  t_sup_aux(T2, T1);
+t_sup_aux(?nominal(Name,S1), ?nominal(Name,S2)) ->
+  case t_sup_aux(S1, S2) of
+      ?nominal_set(_, _)=S -> ?nominal(Name, S);
+      ?nominal(_, _)=S -> ?nominal(Name, S);
+      S -> S 
+  end;
+t_sup_aux(?nominal(N1,_)=T1, ?nominal(N2, _)=T2) ->
+  
       if
         N1 < N2   -> ?nominal_set([T1,T2],?none);
         N1 > N2   -> ?nominal_set([T2,T1],?none)
-      end
-  end;
-t_sup(?nominal_set(LHS_Ns, LHS_S), ?nominal_set(RHS_Ns, RHS_S)) ->
-  sup_nominal_sets(LHS_Ns, RHS_Ns, t_sup(LHS_S, RHS_S));
-t_sup(?nominal_set(LHS_Ns, LHS_S), ?nominal(_, _)=RHS) ->
+      end;
+t_sup_aux(?nominal_set(LHS_Ns, LHS_S), ?nominal_set(RHS_Ns, RHS_S)) ->
+  sup_nominal_sets(LHS_Ns, RHS_Ns, t_sup_aux(LHS_S, RHS_S));
+t_sup_aux(?nominal_set(LHS_Ns, LHS_S), ?nominal(_, _)=RHS) ->
   sup_nominal_sets(LHS_Ns, [RHS], LHS_S);
-t_sup(?nominal(_,_)=T1, ?nominal_set(_,_) = T2) ->
-  t_sup(T2, T1);
-t_sup(?nominal(_,S1)=T1, S2) ->
+t_sup_aux(?nominal(_,_)=T1, ?nominal_set(_,_) = T2) ->
+  t_sup_aux(T2, T1);
+t_sup_aux(?nominal(_,S1)=T1, S2) ->
   Inf = t_inf(S1, S2),
   case t_is_none_or_unit(Inf) of
     true -> 
-      ?nominal_set([T1],S2);
-    false -> t_sup(S1, S2)
+      ?nominal_set([T1], S2);
+    false -> t_sup_aux(S1, S2)
   end;
-t_sup(S1, ?nominal(_,_)=T2) ->
-  t_sup(T2,S1);
-t_sup(?nominal_set(N1,S1),S2) ->
-  normalize_nominal_set(N1, t_sup(S1,S2), []);
-t_sup(S,?nominal_set(_,_)=T2) ->
-  t_sup(T2,S);
-t_sup(T1, T2) ->
+t_sup_aux(S1, ?nominal(_,_)=T2) ->
+  t_sup_aux(T2,S1);
+t_sup_aux(?nominal_set(N1,S1),S2) ->
+  normalize_nominal_set(N1, t_sup_aux(S1,S2), []);
+t_sup_aux(S,?nominal_set(_,_)=T2) ->
+  t_sup_aux(T2,S);
+t_sup_aux(T1, T2) ->
   ?union(U1) = force_union(T1),
   ?union(U2) = force_union(T2),
   sup_union(U1, U2).
@@ -2517,7 +2538,7 @@ sup_nominal_sets(Left, Right, Other) ->
 
 sup_nominal_sets_1([?nominal(Same, _) = LHS | Left],
                    [?nominal(Same, _) = RHS | Right]) ->
-  Sup = ?nominal(Same, _) = t_sup(LHS, RHS),    %Assertion.
+  Sup = t_sup(LHS, RHS),
   [Sup | sup_nominal_sets_1(Left, Right)];
 sup_nominal_sets_1([?nominal(LHS_Name, _) = LHS | Left] = Left0,
                    [?nominal(RHS_Name, _) = RHS | Right] = Right0) ->
@@ -2534,8 +2555,6 @@ sup_nominal_sets_1([], []) ->
 
 normalize_nominal_set(_, ?any, _) ->
   ?any;
-normalize_nominal_set([?any | _], _, _) ->
-  ?any;
 normalize_nominal_set([], Other, []) ->
   Other;
 normalize_nominal_set([], ?none, [?nominal(_,_) = N]) -> N;
@@ -2546,7 +2565,7 @@ normalize_nominal_set([?nominal(_,_)=Type | Types], ?none, Nominals) ->
 normalize_nominal_set([?none | Types], Other, Nominals) ->
   normalize_nominal_set(Types, Other, Nominals);
 normalize_nominal_set([Type | Types], Other0, Nominals) ->
-  case t_sup(Type, Other0) of
+  case t_sup_aux(Type, Other0) of
     ?nominal_set(_,_) ->
       %% The `Other` type does not overlap with the nominal type, include it
       %% in the new nominal list.
@@ -2743,46 +2762,51 @@ t_inf(T1, T2) ->
 
 -spec t_inf(erl_type(), erl_type(), t_inf_opaques()) -> erl_type().
 
-t_inf(?var(_), ?var(_), _Opaques) -> ?any;
-t_inf(?var(_), T, _Opaques) -> do_not_subst_all_vars_to_any(T);
-t_inf(T, ?var(_), _Opaques) -> do_not_subst_all_vars_to_any(T);
-t_inf(?any, T, _Opaques) -> do_not_subst_all_vars_to_any(T);
-t_inf(T, ?any, _Opaques) -> do_not_subst_all_vars_to_any(T);
-t_inf(?none, _, _Opaques) -> ?none;
-t_inf(_, ?none, _Opaques) -> ?none;
-t_inf(?unit, _, _Opaques) -> ?unit;	% ?unit cases should appear below ?none
-t_inf(_, ?unit, _Opaques) -> ?unit;
-t_inf(T, T, _Opaques) -> do_not_subst_all_vars_to_any(T);
-t_inf(?atom(Set1), ?atom(Set2), _) ->
+t_inf(T1, T2, Opaques) -> 
+  Res = t_inf_aux(T1, T2, Opaques),
+  {true, true, _, _} = {t_is_subtype(Res, subst_all_vars_to_any(T1)), t_is_subtype(Res, subst_all_vars_to_any(T2)), T1, T2},
+  Res.
+
+t_inf_aux(?var(_), ?var(_), _Opaques) -> ?any;
+t_inf_aux(?var(_), T, _Opaques) -> do_not_subst_all_vars_to_any(T);
+t_inf_aux(T, ?var(_), _Opaques) -> do_not_subst_all_vars_to_any(T);
+t_inf_aux(?any, T, _Opaques) -> do_not_subst_all_vars_to_any(T);
+t_inf_aux(T, ?any, _Opaques) -> do_not_subst_all_vars_to_any(T);
+t_inf_aux(?none, _, _Opaques) -> ?none;
+t_inf_aux(_, ?none, _Opaques) -> ?none;
+t_inf_aux(?unit, _, _Opaques) -> ?unit;	% ?unit cases should appear below ?none
+t_inf_aux(_, ?unit, _Opaques) -> ?unit;
+t_inf_aux(T, T, _Opaques) -> do_not_subst_all_vars_to_any(T);
+t_inf_aux(?atom(Set1), ?atom(Set2), _) ->
   case set_intersection(Set1, Set2) of
     ?none ->  ?none;
     NewSet -> ?atom(NewSet)
   end;
-t_inf(?bitstr(U1, B1), ?bitstr(0, B2), _Opaques) ->
+t_inf_aux(?bitstr(U1, B1), ?bitstr(0, B2), _Opaques) ->
   if B2 >= B1 andalso (B2-B1) rem U1 =:= 0 -> t_bitstr(0, B2);
      true -> ?none
   end;
-t_inf(?bitstr(0, B1), ?bitstr(U2, B2), _Opaques) ->
+t_inf_aux(?bitstr(0, B1), ?bitstr(U2, B2), _Opaques) ->
   if B1 >= B2 andalso (B1-B2) rem U2 =:= 0 -> t_bitstr(0, B1);
      true -> ?none
   end;
-t_inf(?bitstr(U1, B1), ?bitstr(U1, B1), _Opaques) ->
+t_inf_aux(?bitstr(U1, B1), ?bitstr(U1, B1), _Opaques) ->
   t_bitstr(U1, B1);
-t_inf(?bitstr(U1, B1), ?bitstr(U2, B2), _Opaques) when U2 > U1 ->
+t_inf_aux(?bitstr(U1, B1), ?bitstr(U2, B2), _Opaques) when U2 > U1 ->
   inf_bitstr(U2, B2, U1, B1);
-t_inf(?bitstr(U1, B1), ?bitstr(U2, B2), _Opaques) ->
+t_inf_aux(?bitstr(U1, B1), ?bitstr(U2, B2), _Opaques) ->
   inf_bitstr(U1, B1, U2, B2);
-t_inf(?function(Domain1, Range1), ?function(Domain2, Range2), Opaques) ->
-  case t_inf(Domain1, Domain2, Opaques) of
+t_inf_aux(?function(Domain1, Range1), ?function(Domain2, Range2), Opaques) ->
+  case t_inf_aux(Domain1, Domain2, Opaques) of
     ?none -> ?none;
-    Domain -> ?function(Domain, t_inf(Range1, Range2, Opaques))
+    Domain -> ?function(Domain, t_inf_aux(Range1, Range2, Opaques))
   end;
-t_inf(?identifier(Set1), ?identifier(Set2), _Opaques) ->
+t_inf_aux(?identifier(Set1), ?identifier(Set2), _Opaques) ->
   case set_intersection(Set1, Set2) of
     ?none -> ?none;
     Set -> ?identifier(Set)
   end;
-t_inf(?map(_, ADefK, ADefV) = A, ?map(_, BDefK, BDefV) = B, _Opaques) ->
+t_inf_aux(?map(_, ADefK, ADefV) = A, ?map(_, BDefK, BDefV) = B, Opaques) ->
   %% Because it simplifies the anonymous function, we allow Pairs to temporarily
   %% contain mandatory pairs with none values, since all such cases should
   %% result in a none result.
@@ -2790,34 +2814,42 @@ t_inf(?map(_, ADefK, ADefV) = A, ?map(_, BDefK, BDefV) = B, _Opaques) ->
     map_pairwise_merge(
       %% For optional keys in both maps, when the infimum is none, we have
       %% essentially concluded that K must not be a key in the map.
-      fun(K, ?opt, V1, ?opt, V2) -> {K, ?opt, t_inf(V1, V2)};
+      fun(K, ?opt, V1, ?opt, V2) -> {K, ?opt, t_inf_aux(V1, V2, Opaques)};
 	 %% When a key is optional in one map, but mandatory in another, it
 	 %% becomes mandatory in the infinumum
-	 (K, _, V1, _, V2) -> {K, ?mand, t_inf(V1, V2)}
+	 (K, _, V1, _, V2) -> {K, ?mand, t_inf_aux(V1, V2, Opaques)}
       end, A, B),
-  t_map(Pairs, t_inf(ADefK, BDefK), t_inf(ADefV, BDefV));
+  t_map(Pairs, t_inf_aux(ADefK, BDefK, Opaques), t_inf_aux(ADefV, BDefV, Opaques));
 %% Intersection of 1 or more nominal types
-t_inf(?nominal_set(LHS_Ns, LHS_S),?nominal_set(RHS_Ns, RHS_S), Opaques) ->
-  inf_nominal_sets(LHS_Ns, RHS_Ns, t_inf(LHS_S, RHS_S, Opaques), Opaques);
-t_inf(?nominal_set(LHS_Ns, LHS_S), ?nominal(_, _)=RHS, Opaques) ->
-  inf_nominal_sets(LHS_Ns, [RHS], LHS_S, Opaques);
-t_inf(?nominal(_, _)=LHS, ?nominal_set(_, _)=RHS, Opaques) ->
-  t_inf(RHS, LHS, Opaques);
-t_inf(?nominal_set(LHS_Ns, LHS_S), RHS, Opaques) ->
-  Ns = [t_inf(T, RHS, Opaques) || T <- LHS_Ns],
-  normalize_nominal_set(Ns, t_inf(LHS_S, RHS, Opaques), []);
-t_inf(LHS, ?nominal_set(_, _)=RHS, Opaques) ->
-  t_inf(RHS, LHS, Opaques);
-t_inf(?nominal(Same, LHS_S), ?nominal(Same, RHS_S), Opaques) ->
-  Inf = t_inf(LHS_S, RHS_S, Opaques),
+t_inf_aux(?nominal_set(LHS_Ns, LHS_S),?nominal_set(RHS_Ns, RHS_S), Opaques) ->
+  inf_nominal_sets(LHS_Ns, RHS_Ns, t_inf_aux(LHS_S, RHS_S, Opaques), Opaques);
+t_inf_aux(?nominal_set(LHS_Ns, LHS_S), ?nominal(RHS_N, _)=RHS, Opaques) ->
+  case inf_nominal_sets(LHS_Ns, [?nominal(RHS_N, ?any)], ?none, Opaques) of
+    ?nominal(RHS_N, S) -> 
+      io:format("nominal_structure1~p~n", [S]),
+      io:format("nominal_structure2~p~n", [t_sup_aux(S, LHS_S)]),
+      io:format("RHS~p~n", [RHS]),
+      t_inf_aux(RHS, t_sup_aux(S, LHS_S), Opaques); % because t_sup is used within normalization, we can prove that there's no overlap btw S and LHS_S
+    ?none -> ?none;
+    S -> ?nominal(RHS_N, S)
+  end;
+t_inf_aux(?nominal(_, _)=LHS, ?nominal_set(_, _)=RHS, Opaques) ->
+  t_inf_aux(RHS, LHS, Opaques);
+t_inf_aux(?nominal_set(LHS_Ns, LHS_S), RHS, Opaques) ->
+  Ns = [t_inf_aux(T, RHS, Opaques) || T <- LHS_Ns],
+  normalize_nominal_set(Ns, t_inf_aux(LHS_S, RHS, Opaques), []);
+t_inf_aux(LHS, ?nominal_set(_, _)=RHS, Opaques) ->
+  t_inf_aux(RHS, LHS, Opaques);
+t_inf_aux(?nominal(Same, LHS_S), ?nominal(Same, RHS_S), Opaques) ->
+  Inf = t_inf_aux(LHS_S, RHS_S, Opaques),
   case t_is_none_or_unit(Inf) of
     true -> ?none;
     false -> 
       ?nominal(Same, Inf)
   end;
-t_inf(?nominal(LHS_Name, ?nominal(L_N, _)=L_I),
+t_inf_aux(?nominal(LHS_Name, ?nominal(L_N, _)=L_I),
       ?nominal(RHS_Name, ?nominal(R_N, _)=R_I), Opaques) ->
-  Inf = t_inf(L_I, R_I, Opaques),
+  Inf = t_inf_aux(L_I, R_I, Opaques),
   case t_is_none_or_unit(Inf) of
     true ->
       ?none;
@@ -2835,40 +2867,40 @@ t_inf(?nominal(LHS_Name, ?nominal(L_N, _)=L_I),
         _ -> ?none
       end
   end;
-t_inf(?nominal(LHS_Name, ?nominal(_, _)=Inner),
+t_inf_aux(?nominal(LHS_Name, ?nominal(_, _)=Inner),
       ?nominal(_, _)=RHS, Opaques) ->
-  Inf = t_inf(Inner, RHS, Opaques),
+  Inf = t_inf_aux(Inner, RHS, Opaques),
   case t_is_none_or_unit(Inf) of
     true -> ?none;
     false -> ?nominal(LHS_Name, Inf)
   end;
-t_inf(LHS, ?nominal(_, ?nominal(_, _))=RHS, Opaques) ->
-  t_inf(RHS, LHS, Opaques);
-t_inf(?nominal(_, _), ?nominal(_, _), _Opaques) ->
+t_inf_aux(LHS, ?nominal(_, ?nominal(_, _))=RHS, Opaques) ->
+  t_inf_aux(RHS, LHS, Opaques);
+t_inf_aux(?nominal(_, _), ?nominal(_, _), _Opaques) ->
   ?none;
-t_inf(?nominal(LHS_Name, LHS_S), RHS_S, Opaques) ->
-  Inf = t_inf(LHS_S, RHS_S, Opaques),
+t_inf_aux(?nominal(LHS_Name, LHS_S), RHS_S, Opaques) ->
+  Inf = t_inf_aux(LHS_S, RHS_S, Opaques),
   case t_is_none_or_unit(Inf) of
     true -> ?none;
     false -> ?nominal(LHS_Name, Inf)
   end;
-t_inf(LHS, ?nominal(_, _)=RHS, Opaques) ->
-  t_inf(RHS, LHS, Opaques);
-t_inf(?nil, ?nil, _Opaques) -> ?nil;
-t_inf(?nil, ?nonempty_list(_, _), _Opaques) ->
+t_inf_aux(LHS, ?nominal(_, _)=RHS, Opaques) ->
+  t_inf_aux(RHS, LHS, Opaques);
+t_inf_aux(?nil, ?nil, _Opaques) -> ?nil;
+t_inf_aux(?nil, ?nonempty_list(_, _), _Opaques) ->
   ?none;
-t_inf(?nonempty_list(_, _), ?nil, _Opaques) ->
+t_inf_aux(?nonempty_list(_, _), ?nil, _Opaques) ->
   ?none;
-t_inf(?nil, ?list(_Contents, Termination, _), Opaques) ->
-  t_inf(?nil, t_unopaque(Termination), Opaques);
-t_inf(?list(_Contents, Termination, _), ?nil, Opaques) ->
-  t_inf(?nil, t_unopaque(Termination), Opaques);
-t_inf(?list(Contents1, Termination1, Size1),
+t_inf_aux(?nil, ?list(_Contents, Termination, _), Opaques) ->
+  t_inf_aux(?nil, t_unopaque(Termination), Opaques);
+t_inf_aux(?list(_Contents, Termination, _), ?nil, Opaques) ->
+  t_inf_aux(?nil, t_unopaque(Termination), Opaques);
+t_inf_aux(?list(Contents1, Termination1, Size1),
       ?list(Contents2, Termination2, Size2), Opaques) ->
-  case t_inf(Termination1, Termination2, Opaques) of
+  case t_inf_aux(Termination1, Termination2, Opaques) of
     ?none -> ?none;
     Termination ->
-      case t_inf(Contents1, Contents2, Opaques) of
+      case t_inf_aux(Contents1, Contents2, Opaques) of
 	?none ->
 	  %% If none of the lists are nonempty, then the infimum is nil.
 	  case (Size1 =:= ?unknown_qual) andalso (Size2 =:= ?unknown_qual) of
@@ -2886,7 +2918,7 @@ t_inf(?list(Contents1, Termination1, Size1),
 	  ?list(Contents, Termination, Size)
       end
   end;
-t_inf(?number(_, _) = T1, ?number(_, _) = T2, _Opaques) ->
+t_inf_aux(?number(_, _) = T1, ?number(_, _) = T2, _Opaques) ->
   case {T1, T2} of
     {T, T}                            -> T;
     {_, ?number(?any, ?unknown_qual)} -> T1;
@@ -2903,7 +2935,7 @@ t_inf(?number(_, _) = T1, ?number(_, _) = T2, _Opaques) ->
     {?int_range(From1, To1), ?int_range(From2, To2)} ->
       t_from_range(max(From1, From2), min(To1, To2));
     {Range = ?int_range(_, _), ?int_set(Set)} ->
-      %% io:format("t_inf range, set args ~p ~p ~n", [T1, T2]),
+      %% io:format("t_inf_aux range, set args ~p ~p ~n", [T1, T2]),
       Ans2 =
 	case set_filter(fun(X) -> in_range(X, Range) end, Set) of
 	  ?none -> ?none;
@@ -2917,50 +2949,50 @@ t_inf(?number(_, _) = T1, ?number(_, _) = T2, _Opaques) ->
 	NewSet -> ?int_set(NewSet)
       end
   end;
-t_inf(?product(Types1), ?product(Types2), Opaques) ->
+t_inf_aux(?product(Types1), ?product(Types2), Opaques) ->
   L1 = length(Types1),
   L2 = length(Types2),
   if L1 =:= L2 -> ?product(t_inf_lists(Types1, Types2, Opaques));
      true -> ?none
   end;
-t_inf(?product(_), _, _Opaques) ->
+t_inf_aux(?product(_), _, _Opaques) ->
   ?none;
-t_inf(_, ?product(_), _Opaques) ->
+t_inf_aux(_, ?product(_), _Opaques) ->
   ?none;
-t_inf(?tuple(?any, ?any, ?any), ?tuple(_, _, _) = T, _Opaques) ->
+t_inf_aux(?tuple(?any, ?any, ?any), ?tuple(_, _, _) = T, _Opaques) ->
   do_not_subst_all_vars_to_any(T);
-t_inf(?tuple(_, _, _) = T, ?tuple(?any, ?any, ?any), _Opaques) ->
+t_inf_aux(?tuple(_, _, _) = T, ?tuple(?any, ?any, ?any), _Opaques) ->
   do_not_subst_all_vars_to_any(T);
-t_inf(?tuple(?any, ?any, ?any), ?tuple_set(_) = T, _Opaques) ->
+t_inf_aux(?tuple(?any, ?any, ?any), ?tuple_set(_) = T, _Opaques) ->
   do_not_subst_all_vars_to_any(T);
-t_inf(?tuple_set(_) = T, ?tuple(?any, ?any, ?any), _Opaques) ->
+t_inf_aux(?tuple_set(_) = T, ?tuple(?any, ?any, ?any), _Opaques) ->
   do_not_subst_all_vars_to_any(T);
-t_inf(?tuple(Elements1, Arity, _Tag1), ?tuple(Elements2, Arity, _Tag2), Opaques) ->
+t_inf_aux(?tuple(Elements1, Arity, _Tag1), ?tuple(Elements2, Arity, _Tag2), Opaques) ->
   case t_inf_lists_strict(Elements1, Elements2, Opaques) of
     bottom -> ?none;
     NewElements -> t_tuple(NewElements)
   end;
-t_inf(?tuple_set(List1), ?tuple_set(List2), Opaques) ->
+t_inf_aux(?tuple_set(List1), ?tuple_set(List2), Opaques) ->
   inf_tuple_sets(List1, List2, Opaques);
-t_inf(?tuple_set(List), ?tuple(_, Arity, _) = T, Opaques) ->
+t_inf_aux(?tuple_set(List), ?tuple(_, Arity, _) = T, Opaques) ->
   inf_tuple_sets(List, [{Arity, [T]}], Opaques);
-t_inf(?tuple(_, Arity, _) = T, ?tuple_set(List), Opaques) ->
+t_inf_aux(?tuple(_, Arity, _) = T, ?tuple_set(List), Opaques) ->
   inf_tuple_sets(List, [{Arity, [T]}], Opaques);
 %% be careful: here and in the next clause T can be ?opaque
-t_inf(?union(U1), T, Opaques) ->
+t_inf_aux(?union(U1), T, Opaques) ->
   ?union(U2) = force_union(T),
   inf_union(U1, U2, Opaques);
-t_inf(T, ?union(U2), Opaques) ->
+t_inf_aux(T, ?union(U2), Opaques) ->
   ?union(U1) = force_union(T),
   inf_union(U1, U2, Opaques);
-t_inf(?opaque(Set1), ?opaque(Set2), Opaques) ->
+t_inf_aux(?opaque(Set1), ?opaque(Set2), Opaques) ->
   inf_opaque(Set1, Set2, Opaques);
-t_inf(?opaque(_) = T1, T2, Opaques) ->
+t_inf_aux(?opaque(_) = T1, T2, Opaques) ->
   inf_opaque1(T2, T1, 1, Opaques);
-t_inf(T1, ?opaque(_) = T2, Opaques) ->
+t_inf_aux(T1, ?opaque(_) = T2, Opaques) ->
   inf_opaque1(T1, T2, 2, Opaques);
 %% and as a result, the cases for ?opaque should appear *after* ?union
-t_inf(#c{}, #c{}, _) ->
+t_inf_aux(#c{}, #c{}, _) ->
   ?none.
 
 inf_opaque1(T1, ?opaque(Set2)=T2, Pos, Opaques) ->
@@ -3093,19 +3125,8 @@ t_inf_lists_strict([T1|Left1], [T2|Left2], Acc, Opaques) ->
 t_inf_lists_strict([], [], Acc, _Opaques) ->
   lists:reverse(Acc).
 
-inf_nominal_sets(Left, Right, ?none, Opaques) ->
-  case inf_nominal_sets_1(Left, Right, Opaques) of
-    [?nominal(_,_) = N] -> N;
-    [_|_]=Ns -> 
-      ?nominal_set(Ns, ?none);
-    [] -> ?none
-  end;
 inf_nominal_sets(Left, Right, Other, Opaques) ->
-  case inf_nominal_sets_1(Left, Right, Opaques) of
-    [_|_]=Ns -> 
-      ?nominal_set(Ns, Other);
-    [] -> Other
-  end.
+  normalize_nominal_set(inf_nominal_sets_1(Left, Right, Opaques), Other, []).
 
 inf_nominal_sets_1([?nominal(Same, _) = LHS | Left],
                    [?nominal(Same, _) = RHS | Right],
@@ -3296,6 +3317,14 @@ t_subst_aux(?list(Contents, Termination, Size), Map) ->
   end;
 t_subst_aux(?function(Domain, Range), Map) ->
   ?function(t_subst_aux(Domain, Map), t_subst_aux(Range, Map));
+% t_subst_aux(?nominal({gb_sets,_,_,_},S), Map) ->
+%   error(t_subst_aux(S, Map));
+t_subst_aux(?nominal(N,S), Map) ->
+  ?nominal(N, t_subst_aux(S, Map));
+t_subst_aux(?nominal_set(N, S), Map) ->
+  normalize_nominal_set([t_subst_aux(X, Map) || X <- N],
+                         t_subst_aux(S, Map),
+                         []);
 t_subst_aux(?product(Types), Map) ->
   ?product([t_subst_aux(T, Map) || T <- Types]);
 t_subst_aux(?tuple(?any, ?any, ?any) = T, _Map) ->
@@ -3806,7 +3835,7 @@ subtract_union([], [], Type, Acc) ->
 
 subtract_nominal_sets([], Str1, _, Str2, []) -> t_subtract(Str1, Str2);
 subtract_nominal_sets([], Str1, _, Str2, Acc) -> 
-  ?nominal_set(lists:reverse(Acc), t_subtract(Str1, Str2));
+  normalize_nominal_set(Acc, t_subtract(Str1, Str2), []);
 subtract_nominal_sets([?nominal(Name, S1)|Ts1], Str1, [], Str2, Acc) -> 
   Sub = t_subtract(S1, Str2),
   case t_is_none_or_unit(Sub) of
@@ -3876,7 +3905,7 @@ t_is_equal(_, _) -> false.
 -spec t_is_subtype(erl_type(), erl_type()) -> boolean().
 
 t_is_subtype(T1, T2) ->
-  Inf = t_inf(T1, T2),
+  Inf = t_inf_aux(T1, T2, 'universe'),
   subtype_is_equal(T1, Inf).
 
 %% The subtype relation has to behave correctly irrespective of opaque
@@ -3964,7 +3993,14 @@ t_unopaque(T, _) ->
 t_limit(Term, K) when is_integer(K) ->
   case is_limited(Term, K) of
     true -> Term;
-    false -> t_limit_k(Term, K)
+    false -> 
+      Res = t_limit_k(Term, K),
+      case t_is_subtype(subst_all_vars_to_any(Term), subst_all_vars_to_any(Res)) of 
+        true -> Res;
+        false -> error({subst_all_vars_to_any(Term), subst_all_vars_to_any(Res)})
+      end
+      %true = t_is_subtype(Term, Res),
+      %Res
   end.
 
 is_limited(?any, _) -> true;
@@ -4048,6 +4084,12 @@ t_limit_k(?nominal(N, ?nominal(_, _)=S0), K) ->
       ?nominal(_, _)=S -> ?nominal(N, S);
       _ -> ?any 
   end;
+t_limit_k(?nominal(N, ?nominal_set(_, _)=S0), K) ->
+  case t_limit_k(S0, K - 1) of
+      ?nominal_set(_, _)=S -> ?nominal(N, S);
+      ?nominal(_, _)=S -> ?nominal(N, S);
+      _ -> ?any 
+  end;
 t_limit_k(?nominal(N, S), K) ->
   ?nominal(N, t_limit_k(S, K - 1));
 t_limit_k(?nominal_set(Elements, S), K) ->
@@ -4092,6 +4134,23 @@ t_abstract_records(?function(Domain, Range), RecDict) ->
 	    t_abstract_records(Range, RecDict));
 t_abstract_records(?product(Types), RecDict) ->
   ?product([t_abstract_records(T, RecDict) || T <- Types]);
+t_abstract_records(?nominal(N, ?nominal(_, _)=S0), RecDict) ->
+  case t_abstract_records(S0, RecDict) of
+      ?nominal(_, _)=S -> ?nominal(N, S);
+      _ -> ?any 
+  end;
+t_abstract_records(?nominal(N, ?nominal_set(_, _)=S0), RecDict) ->
+  case t_abstract_records(S0, RecDict) of
+      ?nominal_set(_, _)=S -> ?nominal(N, S);
+      ?nominal(_, _)=S -> ?nominal(N, S);
+      _ -> ?any 
+  end;
+t_abstract_records(?nominal(N, S), RecDict) ->
+  ?nominal(N, t_abstract_records(S, RecDict));
+t_abstract_records(?nominal_set(Elements, S), RecDict) ->
+  normalize_nominal_set([t_abstract_records(X, RecDict) || X <- Elements],
+                         t_abstract_records(S, RecDict),
+                         []);
 t_abstract_records(?union(Types), RecDict) ->
   t_sup([t_abstract_records(T, RecDict) || T <- Types]);
 t_abstract_records(?tuple(?any, ?any, ?any) = T, _RecDict) ->
@@ -4251,7 +4310,7 @@ t_to_string(?nominal(Name, Structure), RecDict) ->
   StructureString = t_to_string(Structure, RecDict),
   flat_format("nominal(~w, ~ts)", [Name, StructureString]);
 t_to_string(?nominal_set(T,S), RecDict) ->
-  "nominal_set[" ++ comma_sequence(T, RecDict) ++ "] |" ++ t_to_string(S) ++ "";
+  union_sequence([N || N <- [S|T], N =/= ?none], RecDict);
 t_to_string(?number(?any, ?unknown_qual), _RecDict) -> "number()";
 t_to_string(?product(List), RecDict) ->
   "<" ++ comma_sequence(List, RecDict) ++ ">";
