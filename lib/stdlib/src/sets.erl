@@ -162,7 +162,7 @@ representations.
 -type set() :: set(_).
 
 -doc "As returned by `new/0`.".
--opaque set(Element) :: #set{segs :: segs(Element)} | #{Element => ?VALUE}.
+-nominal set(Element) :: #set{segs :: segs(Element)} | #{Element => ?VALUE}.
 
 %%------------------------------------------------------------------------------
 

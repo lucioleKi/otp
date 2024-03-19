@@ -329,7 +329,7 @@ compile_and_store(Files, #analysis_state{codeserver = CServer,
 
 -nominal compile_init_data()  :: #compile_init{}.
 -type error_reason()         :: string().
--opaque compile_result()     :: {[{file:filename(), error_reason()}],
+-nominal compile_result()     :: {[{file:filename(), error_reason()}],
                                  [module()]}.
 % dialyzer_analysis_callgraph.erl:82:9: The created fun has no local return
 % dialyzer_analysis_callgraph.erl:118:1: Function analysis_start/3 has no local return

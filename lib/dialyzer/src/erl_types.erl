@@ -299,7 +299,7 @@
 	    elements  = []	      :: term(),
 	    qualifier = ?unknown_qual :: qual()}).
 
--opaque erl_type() :: ?any | ?none | ?unit | #c{}.
+-nominal erl_type() :: ?any | ?none | ?unit | #c{}.
 % Infinite loop
 
 %%-----------------------------------------------------------------------------
@@ -2354,7 +2354,7 @@ t_sup1([], Type) ->
 
 t_sup(T1, T2) -> 
   Res = t_sup_aux(T1, T2),
-  {true, true, _, _, _} = {t_is_subtype(subst_all_vars_to_any(T1), Res), t_is_subtype(subst_all_vars_to_any(T2), Res), T1, T2, Res},
+  %{true, true, _, _, _} = {t_is_subtype(subst_all_vars_to_any(T1), Res), t_is_subtype(subst_all_vars_to_any(T2), Res), T1, T2, Res},
   Res.
 
 t_sup_aux(?any, _) -> ?any;
@@ -2455,28 +2455,8 @@ t_sup_aux(?map(_, ADefK, ADefV) = A, ?map(_, BDefK, BDefV) = B) ->
       end, A, B),
   t_map(Pairs, t_sup_aux(ADefK, BDefK), t_sup_aux(ADefV, BDefV));
 %% Union of 1 or more nominal types/nominal sets
-t_sup_aux(?nominal(Name,?nominal(_,_) = S1), ?nominal(Name,S2)) ->
-  case t_sup_aux(S1, S2) of
-      ?nominal_set(_, _)=S -> ?nominal(Name, S);
-      ?nominal(_, _)=S -> ?nominal(Name, S);
-      S -> S 
-  end;
-t_sup_aux(?nominal(Name,?nominal_set(_,_) = S1), ?nominal(Name,S2)) ->
-  case t_sup_aux(S1, S2) of
-      ?nominal_set(_, _)=S -> ?nominal(Name, S);
-      ?nominal(_, _)=S -> ?nominal(Name, S);
-      S -> S 
-  end;
-t_sup_aux(?nominal(Name,_) = T1, ?nominal(Name,?nominal(_,_)) = T2) ->
-  t_sup_aux(T2, T1);
-t_sup_aux(?nominal(Name,_) = T1, ?nominal(Name,?nominal_set(_,_)) = T2) ->
-  t_sup_aux(T2, T1);
 t_sup_aux(?nominal(Name,S1), ?nominal(Name,S2)) ->
-  case t_sup_aux(S1, S2) of
-      ?nominal_set(_, _)=S -> ?nominal(Name, S);
-      ?nominal(_, _)=S -> ?nominal(Name, S);
-      S -> S 
-  end;
+  ?nominal(Name, t_sup_aux(S1, S2));
 t_sup_aux(?nominal(N1,_)=T1, ?nominal(N2, _)=T2) ->
   
       if
@@ -2490,7 +2470,7 @@ t_sup_aux(?nominal_set(LHS_Ns, LHS_S), ?nominal(_, _)=RHS) ->
 t_sup_aux(?nominal(_,_)=T1, ?nominal_set(_,_) = T2) ->
   t_sup_aux(T2, T1);
 t_sup_aux(?nominal(_,S1)=T1, S2) ->
-  Inf = t_inf(S1, S2),
+  Inf = t_inf_aux(S1, S2, 'universe'),
   case t_is_none_or_unit(Inf) of
     true -> 
       ?nominal_set([T1], S2);
@@ -2769,7 +2749,7 @@ t_inf(T1, T2) ->
 
 t_inf(T1, T2, Opaques) -> 
   Res = t_inf_aux(T1, T2, Opaques),
-  {true, true, _, _, _} = {t_is_subtype(Res, subst_all_vars_to_any(T1)), t_is_subtype(Res, subst_all_vars_to_any(T2)), T1, T2, Res},
+  %{true, true, _, _, _} = {t_is_subtype(Res, subst_all_vars_to_any(T1)), t_is_subtype(Res, subst_all_vars_to_any(T2)), T1, T2, Res},
   Res.
 
 t_inf_aux(?var(_), ?var(_), _Opaques) -> ?any;
@@ -2830,14 +2810,14 @@ t_inf_aux(?nominal_set(LHS_Ns, LHS_S),?nominal_set(RHS_Ns, RHS_S), Opaques) ->
   inf_nominal_sets(LHS_Ns, RHS_Ns, t_inf_aux(LHS_S, RHS_S, Opaques), Opaques);
 t_inf_aux(?nominal_set(LHS_Ns, LHS_S), ?nominal(_, _)=RHS, Opaques) ->
    case inf_nominal_sets(LHS_Ns, [RHS], ?none, Opaques) of % this handles the case where LHS_Ns contains a supertype of RHS. 
-    ?nominal_set(_, ?none) = S ->
+    ?nominal_set(_, ?none) = S -> % this case is for when RHS is a supertype of many nominal types
       t_sup(S, t_inf_aux(LHS_S, RHS, Opaques)); 
     ?nominal(N, S) -> 
        %io:format("nominal_structure1~p~n", [S]),
        %io:format("nominal_structure2~p~n", [t_sup_aux(S, LHS_S)]),
        %io:format("RHS~p~n", [RHS]),
-       %io:format("Inf~p~n", [t_inf_aux(RHS, t_sup_aux(S, LHS_S), Opaques)]),
-      ?nominal(N, t_sup_aux(S, t_inf_aux(RHS, LHS_S, Opaques))); % because t_sup is used within normalization, we can prove that there's no overlap btw S and LHS_S
+       %io:format("Inf~p~n", [[?nominal(N, S), t_inf_aux(RHS, LHS_S, Opaques)]]),
+      t_sup_aux(?nominal(N, S), t_inf_aux(RHS, LHS_S, Opaques)); % because t_sup is used within normalization, we can prove that there's no overlap btw S and LHS_S
     ?none -> 
       %io:format("LHS~p~n", [[LHS_Ns, LHS_S, RHS]]),
      t_inf_aux(RHS, LHS_S, Opaques)
@@ -4119,8 +4099,8 @@ t_limit_k(?nominal(_, ?nominal_set(_, _)=Inner), 1) ->
 t_limit_k(?nominal(N, S), K) ->
   ?nominal(N, t_limit_k(S, K - 1));
 t_limit_k(?nominal_set(Elements, S), K) ->
-  normalize_nominal_set([t_limit_k(X, K - 1) || X <- Elements],
-                         t_limit_k(S, K - 1),
+  normalize_nominal_set([t_limit_k(X, K) || X <- Elements],
+                         t_limit_k(S, K),
                          []);
 t_limit_k(?map(Pairs0, DefK0, DefV0), K) ->
   Fun = fun({EK, MNess, EV}, {Exact, DefK1, DefV1}) ->
@@ -4474,7 +4454,7 @@ mod_name(Mod, Name) ->
          mod_recs = #{} :: mod_records()
         }).
 
--opaque cache() :: #cache{}.
+-nominal cache() :: #cache{}.
 
 -spec t_from_form(parse_form(), exported_type_table(), site(), mod_type_table(),
                   var_table(), cache()) -> {erl_type(), cache()}.
