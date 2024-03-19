@@ -1237,10 +1237,12 @@ t_nominal(_, ?any) ->
 t_nominal(Name, Types) -> 
   ?nominal(Name, Types).
 
-%-spec t_is_nominal(erl_type()) -> boolean().
+-spec t_is_nominal(erl_type()) -> boolean().
 
-% t_is_nominal(?nominal(_,_)) -> true;
-% t_is_nominal(_) -> false. 
+t_is_nominal(?nominal(_,_)) -> true; 
+t_is_nominal(_) -> false. 
+
+
 
 -spec t_list() -> erl_type().
 
@@ -2540,12 +2542,14 @@ sup_nominal_sets_1([?nominal(Same, _) = LHS | Left],
                    [?nominal(Same, _) = RHS | Right]) ->
   Sup = t_sup(LHS, RHS),
   [Sup | sup_nominal_sets_1(Left, Right)];
-sup_nominal_sets_1([?nominal(LHS_Name, _) = LHS | Left] = Left0,
-                   [?nominal(RHS_Name, _) = RHS | Right] = Right0) ->
-  case LHS_Name < RHS_Name of
-    true -> [LHS | sup_nominal_sets_1(Left, Right0)];
-    false -> [RHS | sup_nominal_sets_1(Left0, Right)]
-  end;
+sup_nominal_sets_1([?nominal(LHS_Name, LHS_S) = LHS | Left] = Left0,
+                   [?nominal(RHS_Name, RHS_S) = RHS | Right] = Right0) ->
+  case t_inf_aux(LHS, RHS, 'universe') of
+    ?nominal(LHS_Name, _) -> [?nominal(RHS_Name, t_sup(LHS_S, RHS_S)) | sup_nominal_sets_1(Left, Right)];
+    ?nominal(RHS_Name, _) -> [?nominal(LHS_Name, t_sup(LHS_S, RHS_S)) | sup_nominal_sets_1(Left, Right)];
+    ?none when LHS_Name < RHS_Name -> [LHS | sup_nominal_sets_1(Left, Right0)];
+    ?none -> [RHS | sup_nominal_sets_1(Left0, Right)]
+    end;
 sup_nominal_sets_1([_|_]=Left, []) ->
   Left;
 sup_nominal_sets_1([], [_|_]=Right) ->
@@ -2556,6 +2560,7 @@ sup_nominal_sets_1([], []) ->
 normalize_nominal_set(_, ?any, _) ->
   ?any;
 normalize_nominal_set([], Other, []) ->
+  false = t_is_nominal(Other), 
   Other;
 normalize_nominal_set([], ?none, [?nominal(_,_) = N]) -> N;
 normalize_nominal_set([], Other, Nominals) ->
@@ -2764,7 +2769,7 @@ t_inf(T1, T2) ->
 
 t_inf(T1, T2, Opaques) -> 
   Res = t_inf_aux(T1, T2, Opaques),
-  {true, true, _, _} = {t_is_subtype(Res, subst_all_vars_to_any(T1)), t_is_subtype(Res, subst_all_vars_to_any(T2)), T1, T2},
+  {true, true, _, _, _} = {t_is_subtype(Res, subst_all_vars_to_any(T1)), t_is_subtype(Res, subst_all_vars_to_any(T2)), T1, T2, Res},
   Res.
 
 t_inf_aux(?var(_), ?var(_), _Opaques) -> ?any;
@@ -2823,16 +2828,20 @@ t_inf_aux(?map(_, ADefK, ADefV) = A, ?map(_, BDefK, BDefV) = B, Opaques) ->
 %% Intersection of 1 or more nominal types
 t_inf_aux(?nominal_set(LHS_Ns, LHS_S),?nominal_set(RHS_Ns, RHS_S), Opaques) ->
   inf_nominal_sets(LHS_Ns, RHS_Ns, t_inf_aux(LHS_S, RHS_S, Opaques), Opaques);
-t_inf_aux(?nominal_set(LHS_Ns, LHS_S), ?nominal(RHS_N, _)=RHS, Opaques) ->
-  case inf_nominal_sets(LHS_Ns, [?nominal(RHS_N, ?any)], ?none, Opaques) of
-    ?nominal(RHS_N, S) -> 
-      io:format("nominal_structure1~p~n", [S]),
-      io:format("nominal_structure2~p~n", [t_sup_aux(S, LHS_S)]),
-      io:format("RHS~p~n", [RHS]),
-      t_inf_aux(RHS, t_sup_aux(S, LHS_S), Opaques); % because t_sup is used within normalization, we can prove that there's no overlap btw S and LHS_S
-    ?none -> ?none;
-    S -> ?nominal(RHS_N, S)
-  end;
+t_inf_aux(?nominal_set(LHS_Ns, LHS_S), ?nominal(_, _)=RHS, Opaques) ->
+   case inf_nominal_sets(LHS_Ns, [RHS], ?none, Opaques) of % this handles the case where LHS_Ns contains a supertype of RHS. 
+    ?nominal_set(_, ?none) = S ->
+      t_sup(S, t_inf_aux(LHS_S, RHS, Opaques)); 
+    ?nominal(N, S) -> 
+       %io:format("nominal_structure1~p~n", [S]),
+       %io:format("nominal_structure2~p~n", [t_sup_aux(S, LHS_S)]),
+       %io:format("RHS~p~n", [RHS]),
+       %io:format("Inf~p~n", [t_inf_aux(RHS, t_sup_aux(S, LHS_S), Opaques)]),
+      ?nominal(N, t_sup_aux(S, t_inf_aux(RHS, LHS_S, Opaques))); % because t_sup is used within normalization, we can prove that there's no overlap btw S and LHS_S
+    ?none -> 
+      %io:format("LHS~p~n", [[LHS_Ns, LHS_S, RHS]]),
+     t_inf_aux(RHS, LHS_S, Opaques)
+   end;
 t_inf_aux(?nominal(_, _)=LHS, ?nominal_set(_, _)=RHS, Opaques) ->
   t_inf_aux(RHS, LHS, Opaques);
 t_inf_aux(?nominal_set(LHS_Ns, LHS_S), RHS, Opaques) ->
@@ -2843,15 +2852,18 @@ t_inf_aux(LHS, ?nominal_set(_, _)=RHS, Opaques) ->
 t_inf_aux(?nominal(Same, LHS_S), ?nominal(Same, RHS_S), Opaques) ->
   Inf = t_inf_aux(LHS_S, RHS_S, Opaques),
   case t_is_none_or_unit(Inf) of
-    true -> ?none;
+    true -> 
+      %io:format("t_inf for same name~p~n", [[LHS_S, RHS_S, Inf]]),
+      ?none;
     false -> 
       ?nominal(Same, Inf)
-  end;
+  end;          
 t_inf_aux(?nominal(LHS_Name, ?nominal(L_N, _)=L_I),
       ?nominal(RHS_Name, ?nominal(R_N, _)=R_I), Opaques) ->
   Inf = t_inf_aux(L_I, R_I, Opaques),
   case t_is_none_or_unit(Inf) of
     true ->
+      %io:format("t_inf for 2 different nested~p~n", [[L_I, R_I, Inf]]),
       ?none;
     false ->
       %% Inf must be one of L_N or R_N since a nominal is by definition more
@@ -2864,7 +2876,9 @@ t_inf_aux(?nominal(LHS_Name, ?nominal(L_N, _)=L_I),
           ?nominal(LHS_Name, Inf);
         ?nominal(R_N, _) -> 
           ?nominal(RHS_Name, Inf);
-        _ -> ?none
+        _ -> 
+          %io:format("t_inf for same name inner~p~n", [[L_I, R_I, Inf]]),
+          ?none
       end
   end;
 t_inf_aux(?nominal(LHS_Name, ?nominal(_, _)=Inner),
@@ -2881,7 +2895,8 @@ t_inf_aux(?nominal(_, _), ?nominal(_, _), _Opaques) ->
 t_inf_aux(?nominal(LHS_Name, LHS_S), RHS_S, Opaques) ->
   Inf = t_inf_aux(LHS_S, RHS_S, Opaques),
   case t_is_none_or_unit(Inf) of
-    true -> ?none;
+    true -> 
+      ?none;
     false -> ?nominal(LHS_Name, Inf)
   end;
 t_inf_aux(LHS, ?nominal(_, _)=RHS, Opaques) ->
@@ -3131,16 +3146,22 @@ inf_nominal_sets(Left, Right, Other, Opaques) ->
 inf_nominal_sets_1([?nominal(Same, _) = LHS | Left],
                    [?nominal(Same, _) = RHS | Right],
                    Opaques) ->
-  case t_inf(LHS, RHS, Opaques) of
+  case t_inf_aux(LHS, RHS, Opaques) of
     ?nominal(_, _) = Inf -> [Inf | inf_nominal_sets_1(Left, Right, Opaques)];
-    ?none -> inf_nominal_sets_1(Left, Right, Opaques)
+    ?none -> 
+      inf_nominal_sets_1(Left, Right, Opaques)
   end;
-inf_nominal_sets_1([?nominal(LHS_Name, _) | Left] = Left0,
-                   [?nominal(RHS_Name, _) | Right] = Right0,
+inf_nominal_sets_1([?nominal(LHS_Name, _) = LHS | Left] = Left0,
+                   [?nominal(RHS_Name, _) = RHS | Right] = Right0,
                    Opaques) ->
-  case LHS_Name < RHS_Name of
-    true -> inf_nominal_sets_1(Left, Right0, Opaques);
-    false -> inf_nominal_sets_1(Left0, Right, Opaques)
+  case t_inf_aux(LHS, RHS, Opaques) of 
+    ?nominal(_, _) = Inf -> [Inf | inf_nominal_sets_1(Left, Right, Opaques)];
+    ?none -> 
+      %io:format("LHS at inf_nominal_sets_1~p~n", [[LHS, RHS]]),
+      case LHS_Name < RHS_Name of
+        true -> inf_nominal_sets_1(Left, Right0, Opaques);
+        false -> inf_nominal_sets_1(Left0, Right, Opaques)
+      end
   end;
 inf_nominal_sets_1(_Left, _Right, _Opaques) ->
   [].
@@ -4079,17 +4100,22 @@ t_limit_k(?opaque(Es), K) ->
             Opaque#opaque{struct = NewS}
           end || #opaque{struct = S} = Opaque <- Es],
   ?opaque(ordsets:from_list(List));
-t_limit_k(?nominal(N, ?nominal(_, _)=S0), K) ->
-  case t_limit_k(S0, K - 1) of
-      ?nominal(_, _)=S -> ?nominal(N, S);
-      _ -> ?any 
-  end;
-t_limit_k(?nominal(N, ?nominal_set(_, _)=S0), K) ->
-  case t_limit_k(S0, K - 1) of
-      ?nominal_set(_, _)=S -> ?nominal(N, S);
-      ?nominal(_, _)=S -> ?nominal(N, S);
-      _ -> ?any 
-  end;
+t_limit_k(?nominal(_, ?nominal(_, _)=Inner), 1) ->
+  %% K = 1, widen by discarding the outermost nested nominal.
+  t_limit_k(Inner, 1);
+t_limit_k(?nominal(_, ?nominal_set(_, _)=Inner), 1) ->
+  t_limit_k(Inner, 1);
+% t_limit_k(?nominal(N, ?nominal(_, _)=S0), K) ->
+%   case t_limit_k(S0, K - 1) of
+%       ?nominal(_, _)=S -> ?nominal(N, S);
+%       _ -> ?any 
+%   end;
+% t_limit_k(?nominal(N, ?nominal_set(_, _)=S0), K) ->
+%   case t_limit_k(S0, K - 1) of
+%       ?nominal_set(_, _)=S -> ?nominal(N, S);
+%       ?nominal(_, _)=S -> ?nominal(N, S);
+%       _ -> ?any 
+%   end;
 t_limit_k(?nominal(N, S), K) ->
   ?nominal(N, t_limit_k(S, K - 1));
 t_limit_k(?nominal_set(Elements, S), K) ->
