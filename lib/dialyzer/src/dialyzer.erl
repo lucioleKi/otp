@@ -888,12 +888,12 @@ message_to_string({invalid_contract, [M, F, A, InvalidContractDetails, Contract,
 		" But the spec is ~ts\n"
 		"~ts",
     [M, F, A, con(M, F, Sig, I), con(M, F, Contract, I), format_invalid_contract_details(InvalidContractDetails)]);
-message_to_string({contract_with_opaque, [M, F, A, OpaqueType, SigType]},
-                 I, _E) ->
-  io_lib:format("The specification for ~w:~tw/~w"
-                " has an opaque subtype ~ts which is violated by the"
-                " success typing ~ts\n",
-                [M, F, A, t(OpaqueType, I), sig(SigType, I)]);
+% message_to_string({contract_with_opaque, [M, F, A, OpaqueType, SigType]},
+%                  I, _E) ->
+%   io_lib:format("The specification for ~w:~tw/~w"
+%                 " has an opaque subtype ~ts which is violated by the"
+%                 " success typing ~ts\n",
+%                 [M, F, A, t(OpaqueType, I), sig(SigType, I)]);
 message_to_string({extra_range, [M, F, A, ExtraRanges, SigRange]}, I, _E) ->
   io_lib:format("The specification for ~w:~tw/~w states that the function"
 		" might also return ~ts but the inferred return is ~ts\n",
@@ -910,44 +910,44 @@ message_to_string({spec_missing_fun, [M, F, A]}, _I, _E) ->
   io_lib:format("Contract for function that does not exist: ~w:~tw/~w\n",
 		[M, F, A]);
 %%----- Warnings for opaque type violations -------------------
-message_to_string({call_with_opaque, [M, F, Args, ArgNs, ExpArgs]}, I, _E) ->
-  io_lib:format("The call ~w:~tw~ts contains ~ts when ~ts\n",
-		[M, F, a(Args, I), form_positions(ArgNs),
-                 form_expected(ExpArgs, I)]);
-message_to_string({call_without_opaque, [M, F, Args, ExpectedTriples]}, I, _E) ->
-  io_lib:format("The call ~w:~tw~ts does not have ~ts\n",
-		[M, F, a(Args, I),
-                 form_expected_without_opaque(ExpectedTriples, I)]);
-message_to_string({opaque_eq, [Type, _Op, OpaqueType]}, I, _E) ->
-  io_lib:format("Attempt to test for equality between a term of type ~ts"
-		" and a term of opaque type ~ts\n",
-                [t(Type, I), t(OpaqueType, I)]);
-message_to_string({opaque_guard, [Arg1, Infix, Arg2, ArgNs]}, I, _E) ->
-  io_lib:format("Guard test ~ts ~s ~ts contains ~s\n",
-		[a(Arg1, I), Infix, a(Arg2, I), form_positions(ArgNs)]);
-message_to_string({opaque_guard, [Guard, Args]}, I, _E) ->
-  io_lib:format("Guard test ~w~ts breaks the opacity of its argument\n",
-		[Guard, a(Args, I)]);
-message_to_string({opaque_match, [Pat, OpaqueType, OpaqueTerm]}, I, _E) ->
-  Term = if OpaqueType =:= OpaqueTerm -> "the term";
-	    true -> t(OpaqueTerm, I)
-	 end,
-  io_lib:format("The attempt to match a term of type ~ts against the ~ts"
-		" breaks the opacity of ~ts\n",
-                [t(OpaqueType, I), ps(Pat, I), Term]);
-message_to_string({opaque_neq, [Type, _Op, OpaqueType]}, I, _E) ->
-  io_lib:format("Attempt to test for inequality between a term of type ~ts"
-		" and a term of opaque type ~ts\n",
-                [t(Type, I), t(OpaqueType, I)]);
-message_to_string({opaque_type_test, [Fun, Args, Arg, ArgType]}, I, _E) ->
-  io_lib:format("The type test ~ts~ts breaks the opacity of the term ~ts~ts\n",
-                [Fun, a(Args, I), Arg, t(ArgType, I)]);
-message_to_string({opaque_size, [SizeType, Size]}, I, _E) ->
-  io_lib:format("The size ~ts breaks the opacity of ~ts\n",
-                [t(SizeType, I), c(Size, I)]);
-message_to_string({opaque_call, [M, F, Args, Culprit, OpaqueType]}, I, _E) ->
-  io_lib:format("The call ~s:~ts~ts breaks the opacity of the term ~ts :: ~ts\n",
-                [M, F, a(Args, I), c(Culprit, I), t(OpaqueType, I)]);
+% message_to_string({call_with_opaque, [M, F, Args, ArgNs, ExpArgs]}, I, _E) ->
+%   io_lib:format("The call ~w:~tw~ts contains ~ts when ~ts\n",
+% 		[M, F, a(Args, I), form_positions(ArgNs),
+%                  form_expected(ExpArgs, I)]);
+% message_to_string({call_without_opaque, [M, F, Args, ExpectedTriples]}, I, _E) ->
+%   io_lib:format("The call ~w:~tw~ts does not have ~ts\n",
+% 		[M, F, a(Args, I),
+%                  form_expected_without_opaque(ExpectedTriples, I)]);
+% message_to_string({opaque_eq, [Type, _Op, OpaqueType]}, I, _E) ->
+%   io_lib:format("Attempt to test for equality between a term of type ~ts"
+% 		" and a term of opaque type ~ts\n",
+%                 [t(Type, I), t(OpaqueType, I)]);
+% message_to_string({opaque_guard, [Arg1, Infix, Arg2, ArgNs]}, I, _E) ->
+%   io_lib:format("Guard test ~ts ~s ~ts contains ~s\n",
+% 		[a(Arg1, I), Infix, a(Arg2, I), form_positions(ArgNs)]);
+% message_to_string({opaque_guard, [Guard, Args]}, I, _E) ->
+%   io_lib:format("Guard test ~w~ts breaks the opacity of its argument\n",
+% 		[Guard, a(Args, I)]);
+% message_to_string({opaque_match, [Pat, OpaqueType, OpaqueTerm]}, I, _E) ->
+%   Term = if OpaqueType =:= OpaqueTerm -> "the term";
+% 	    true -> t(OpaqueTerm, I)
+% 	 end,
+%   io_lib:format("The attempt to match a term of type ~ts against the ~ts"
+% 		" breaks the opacity of ~ts\n",
+%                 [t(OpaqueType, I), ps(Pat, I), Term]);
+% message_to_string({opaque_neq, [Type, _Op, OpaqueType]}, I, _E) ->
+%   io_lib:format("Attempt to test for inequality between a term of type ~ts"
+% 		" and a term of opaque type ~ts\n",
+%                 [t(Type, I), t(OpaqueType, I)]);
+% message_to_string({opaque_type_test, [Fun, Args, Arg, ArgType]}, I, _E) ->
+%   io_lib:format("The type test ~ts~ts breaks the opacity of the term ~ts~ts\n",
+%                 [Fun, a(Args, I), Arg, t(ArgType, I)]);
+% message_to_string({opaque_size, [SizeType, Size]}, I, _E) ->
+%   io_lib:format("The size ~ts breaks the opacity of ~ts\n",
+%                 [t(SizeType, I), c(Size, I)]);
+% message_to_string({opaque_call, [M, F, Args, Culprit, OpaqueType]}, I, _E) ->
+%   io_lib:format("The call ~s:~ts~ts breaks the opacity of the term ~ts :: ~ts\n",
+%                 [M, F, a(Args, I), c(Culprit, I), t(OpaqueType, I)]);
 %%----- Warnings for behaviour errors --------------------
 message_to_string({callback_type_mismatch, [B, F, A, ST, CT]}, I, _E) ->
   io_lib:format("The inferred return type of ~tw/~w ~ts has nothing in"
@@ -1041,42 +1041,42 @@ call_or_apply_to_string(ArgNs, FailReason, SigArgs, SigRet,
                     [t(SigArgs, I), t(SigRet, I), sig(Contract, I)])
   end.
 
-form_positions(ArgNs) ->
-  case ArgNs of
-    [_] -> "an opaque term as ";
-    [_,_|_] -> "opaque terms as "
- end ++ form_position_string(ArgNs) ++
-  case ArgNs of
-    [_] -> " argument";
-    [_,_|_] -> " arguments"
-  end.
+% form_positions(ArgNs) ->
+%   case ArgNs of
+%     [_] -> "an opaque term as ";
+%     [_,_|_] -> "opaque terms as "
+%  end ++ form_position_string(ArgNs) ++
+%   case ArgNs of
+%     [_] -> " argument";
+%     [_,_|_] -> " arguments"
+%   end.
 
 %% We know which positions N are to blame;
 %% the list of triples will never be empty.
-form_expected_without_opaque([{N, T, TStr}], I) ->
-  case erl_types:t_is_opaque(T) of
-    true  ->
-      io_lib:format("an opaque term of type ~ts as ", [t(TStr, I)]);
-    false ->
-      io_lib:format("a term of type ~ts (with opaque subterms) as ",
-                    [t(TStr, I)])
-  end ++ form_position_string([N]) ++ " argument";
-form_expected_without_opaque(ExpectedTriples, _I) -> %% TODO: can do much better here
-  {ArgNs, _Ts, _TStrs} = lists:unzip3(ExpectedTriples),
-  "opaque terms as " ++ form_position_string(ArgNs) ++ " arguments".
+% form_expected_without_opaque([{N, T, TStr}], I) ->
+%   case erl_types:t_is_opaque(T) of
+%     true  ->
+%       io_lib:format("an opaque term of type ~ts as ", [t(TStr, I)]);
+%     false ->
+%       io_lib:format("a term of type ~ts (with opaque subterms) as ",
+%                     [t(TStr, I)])
+%   end ++ form_position_string([N]) ++ " argument";
+% form_expected_without_opaque(ExpectedTriples, _I) -> %% TODO: can do much better here
+%   {ArgNs, _Ts, _TStrs} = lists:unzip3(ExpectedTriples),
+%   "opaque terms as " ++ form_position_string(ArgNs) ++ " arguments".
 
-form_expected(ExpectedArgs, I) ->
-  case ExpectedArgs of
-    [T] ->
-      TS = erl_types:t_to_string(T),
-      case erl_types:t_is_opaque(T) of
-	true  -> io_lib:format("an opaque term of type ~ts is expected",
-                               [t(TS, I)]);
-	false -> io_lib:format("a structured term of type ~ts is expected",
-                               [t(TS, I)])
-      end;
-    [_,_|_] -> "terms of different types are expected in these positions"
-  end.
+% form_expected(ExpectedArgs, I) ->
+%   case ExpectedArgs of
+%     [T] ->
+%       TS = erl_types:t_to_string(T),
+%       case erl_types:t_is_opaque(T) of
+% 	true  -> io_lib:format("an opaque term of type ~ts is expected",
+%                                [t(TS, I)]);
+% 	false -> io_lib:format("a structured term of type ~ts is expected",
+%                                [t(TS, I)])
+%       end;
+%     [_,_|_] -> "terms of different types are expected in these positions"
+%   end.
 
 form_position_string(ArgNs) ->
   case ArgNs of

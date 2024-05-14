@@ -2098,7 +2098,7 @@ key_comparisons_fail(X0, KeyPos, TupleList) ->
 
 %%=============================================================================
 
--spec arg_types(atom(), atom(), arity()) -> [erl_types:type()] | 'unknown'.
+-spec arg_types(atom(), atom(), arity()) -> [erl_types:erl_type()] | 'unknown'.
 
 %%------- erlang --------------------------------------------------------------
 arg_types(erlang, '!', 2) ->

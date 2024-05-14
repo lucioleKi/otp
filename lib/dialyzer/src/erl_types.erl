@@ -2635,7 +2635,7 @@ inf_union(U1, U2) ->
         ?untagged_union(A,B,F,I,L,N,T,Map) = Union2,
         List = [A,B,F,I,L,N,T,Map],
         %% FIXME: Faking ?none opaque -- remove argument.
-        inf_union_collect(List, ?none, InfFun, [], [])
+        inf_union_collect(List, InfFun, [], [])
     end,
   {O1, ThrowList1} =
     OpaqueFun(U1, U2, fun(E, Opaque) -> t_inf(Opaque, E) end),
@@ -2648,16 +2648,16 @@ inf_union(U1, U2) ->
     Sup -> Sup
   end.
 
-inf_union_collect([], _Opaque, _InfFun, InfList, ThrowList) ->
+inf_union_collect([], _InfFun, InfList, ThrowList) ->
   {t_sup(InfList), lists:usort(ThrowList)};
-inf_union_collect([?none|L], Opaque, InfFun, InfList, ThrowList) ->
-  inf_union_collect(L, Opaque, InfFun, [?none|InfList], ThrowList);
-inf_union_collect([E|L], Opaque, InfFun, InfList, ThrowList) ->
-  try InfFun(E, Opaque)of
+inf_union_collect([?none|L], InfFun, InfList, ThrowList) ->
+  inf_union_collect(L, InfFun, [?none|InfList], ThrowList);
+inf_union_collect([E|L], InfFun, InfList, ThrowList) ->
+  try InfFun(E, ?none)of
     Inf ->
-      inf_union_collect(L, Opaque, InfFun, [Inf|InfList], ThrowList)
+      inf_union_collect(L, InfFun, [Inf|InfList], ThrowList)
   catch throw:{pos, Ns} ->
-      inf_union_collect(L, Opaque, InfFun, InfList, Ns ++ ThrowList)
+      inf_union_collect(L, InfFun, InfList, Ns ++ ThrowList)
   end.
 
 inf_union([?none|Left1], [?none|Left2], Type, Acc, ThrowList) ->

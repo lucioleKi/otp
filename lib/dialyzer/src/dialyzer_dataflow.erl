@@ -524,23 +524,13 @@ handle_apply_or_call([{TypeOfApply, {Fun, Sig, Contr, LocalRet}}|Left],
 				     Contr, CArgs, State, FailReason),
 	    WarnType = case Msg of
 			 {call, _} -> ?WARN_FAILING_CALL;
-			 {apply, _} -> ?WARN_FAILING_CALL;
-			 {call_with_opaque, _} -> ?WARN_OPAQUE;
-			 {call_without_opaque, _} -> ?WARN_OPAQUE;
-			 {opaque_type_test, _} -> ?WARN_OPAQUE
+			 {apply, _} -> ?WARN_FAILING_CALL
 		       end,
             LocTree = case Msg of
                         {call, [_M, _F, _ASs, ANs | _]} ->
                           select_arg(ANs, Args, Tree);
                         {apply, [_ASs, ANs | _]} ->
-                          select_arg(ANs, Args, Tree);
-                        {call_with_opaque, [_M, _F, _ASs, ANs, _EAs_]} ->
-                          select_arg(ANs, Args, Tree);
-                        {call_without_opaque,
-                         [_M, _F, _ASs, [{N, _T, _TS} | _]]} ->
-                          select_arg([N], Args, Tree);
-                        {opaque_type_test, _} ->
-                          Tree
+                          select_arg(ANs, Args, Tree)
 		       end,
             Frc = {erlang, is_record, 3} =:= state__lookup_name(Fun, State),
 	    state__add_warning(State, WarnType, LocTree, Msg, Frc)
@@ -927,7 +917,7 @@ handle_try(Tree, Map, State) ->
       Map2 = mark_as_fresh(Vars, Map1),
       {SuccState, SuccMap, SuccType} =
         case bind_pat_vars(Vars, TypeList, Map2, State1) of
-          {error, _, _, _, _} ->
+          {error, _, _, _} ->
             {State1, map__new(), t_none()};
           {SuccMap1, VarTypes} ->
             %% Try to bind the argument. Will only succeed if
@@ -935,7 +925,7 @@ handle_try(Tree, Map, State) ->
             SuccMap2 =
               case bind_pat_vars_reverse([Arg], [t_product(VarTypes)],
                                          SuccMap1, State1) of
-                {error, _, _, _, _} -> SuccMap1;
+                {error, _, _, _} -> SuccMap1;
                 {SM, _} -> SM
               end,
             traverse(Body, SuccMap2, State1)
@@ -970,7 +960,7 @@ handle_map(Tree,Map,State) ->
       of ResT ->
 	  BindT = t_map([{K, t_any()} || K <- ExactKeys]),
 	  case bind_pat_vars_reverse([Arg], [BindT], Map2, State2) of
-	    {error, _, _, _, _} -> {State2, Map2, ResT};
+	    {error, _, _, _} -> {State2, Map2, ResT};
 	    {Map3, _} ->           {State2, Map3, ResT}
 	  end
       catch {none, MapType, {K,_}, KVTree} ->
@@ -1100,7 +1090,7 @@ do_clause(C, Arg, ArgType, OrigArgType, Map, State, Warns) ->
   BindRes =
     case t_is_none(ArgType) of
       true ->
-	{error, maybe_covered, OrigArgType, ignore, ignore};
+	{error, maybe_covered, OrigArgType, ignore};
       false ->
 	ArgTypes = get_arg_list(ArgType, Pats),
 	bind_pat_vars(Pats, ArgTypes, Map1, State)
@@ -1108,7 +1098,7 @@ do_clause(C, Arg, ArgType, OrigArgType, Map, State, Warns) ->
 
   %% Test whether the binding succeeded.
   case BindRes of
-    {error, _ErrorType, _NewPats, _Type, _OpaqueTerm} ->
+    {error, _ErrorType, _NewPats, _Type} ->
       ?debug("Failed binding pattern: ~ts\nto ~ts\n",
 	     [cerl_prettypr:format(C), format_type(ArgType, State)]),
       NewWarns =
@@ -1126,7 +1116,7 @@ do_clause(C, Arg, ArgType, OrigArgType, Map, State, Warns) ->
       Map3 =
         case bind_pat_vars_reverse([Arg], [t_product(PatTypes)],
                                    Map2, State) of
-          {error, _, _, _, _} -> Map2;
+          {error, _, _, _} -> Map2;
           {NewMap, _} -> NewMap
 	end,
 
@@ -1163,10 +1153,10 @@ clause_error(State, Map, {error, maybe_covered, OrigArgType, _, _}, C, Pats, _) 
         PatString = format_patterns(Pats),
         ArgTypeString = format_type(OrigArgType, State),
         {pattern_match_cov, [PatString, ArgTypeString]};
-      {error, ErrorType, _, _, OpaqueTerm} ->
+      {error, ErrorType, _, _} ->
         %% This pattern can never match.
         failed_msg(State, ErrorType, Pats, OrigArgType,
-                   Pats, OrigArgType, OpaqueTerm)
+                   Pats, OrigArgType)
     end,
   Force = false,
   clause_error_warning(Msg, Force, C);
@@ -1175,19 +1165,19 @@ clause_error(State, _Map, BindRes, C, Pats, ArgType) ->
   %% unless it is the default clause in a list comprehension
   %% without any filters.
   Force = not is_lc_default_clause(C),
-  {error, ErrorType, NewPats, NewType, OpaqueTerm} = BindRes,
-  Msg = failed_msg(State, ErrorType, Pats, ArgType, NewPats, NewType, OpaqueTerm),
+  {error, ErrorType, NewPats, NewType} = BindRes,
+  Msg = failed_msg(State, ErrorType, Pats, ArgType, NewPats, NewType),
   clause_error_warning(Msg, Force, C).
 
-failed_msg(State, ErrorType, Pats, Type, NewPats, NewType, OpaqueTerm) ->
+failed_msg(State, ErrorType, Pats, Type, NewPats, NewType) ->
     case ErrorType of
       bind ->
         {pattern_match, [format_patterns(Pats), format_type(Type, State)]};
       record ->
-        {record_match, [format_patterns(NewPats), format_type(NewType, State)]};
-      opaque ->
-        {opaque_match, [format_patterns(NewPats), format_type(NewType, State),
-                        format_type(OpaqueTerm, State)]}
+        {record_match, [format_patterns(NewPats), format_type(NewType, State)]}
+      % opaque ->
+      %   {opaque_match, [format_patterns(NewPats), format_type(NewType, State),
+      %                   format_type(OpaqueTerm, State)]}
     end.
 
 clause_error_warning(Msg, Force, C) ->
@@ -1197,8 +1187,6 @@ warn_type({Tag, _}) ->
   case Tag of
     guard_fail -> ?WARN_MATCHING;
     neg_guard_fail -> ?WARN_MATCHING;
-    opaque_guard -> ?WARN_OPAQUE;
-    opaque_match -> ?WARN_OPAQUE;
     pattern_match -> ?WARN_MATCHING;
     pattern_match_cov -> ?WARN_MATCHING;
     record_match -> ?WARN_MATCHING
@@ -1549,7 +1537,7 @@ bind_checked_inf(Pat, ExpectedType, Type) ->
     false -> Inf
   end.
 
-bind_error(Pats, Type, OpaqueType, Error0) ->
+bind_error(Pats, Type, _Inf, Error0) ->
   Error = case {Error0, Pats} of
             {bind, [Pat]} ->
               case is_literal_record(Pat) of
@@ -1558,7 +1546,7 @@ bind_error(Pats, Type, OpaqueType, Error0) ->
               end;
             _ -> Error0
           end,
-  throw({error, Error, Pats, Type, OpaqueType}).
+  throw({error, Error, Pats, Type}).
 
 %%----------------------------------------
 %% Guards
@@ -2369,7 +2357,7 @@ bind_guard_case_clauses(GenArgType, GenMap, ArgExpr, [Clause|Left],
 			 false -> t_to_tlist(ArgType)
 		       end,
 	    case bind_pat_vars(Pats, ArgTypes, NewMap0, State) of
-	      {error, _, _, _, _} -> none;
+	      {error, _, _, _} -> none;
 	      {PatMap, _PatTypes} -> PatMap
 	    end
 	end
