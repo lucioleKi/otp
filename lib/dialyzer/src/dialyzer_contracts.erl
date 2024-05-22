@@ -270,7 +270,6 @@ check_contracts(Contracts, Callgraph, FunTypes) ->
       | {'error',
              'invalid_contract'
            | {'invalid_contract', {InvalidArgIdxs :: [pos_integer()], IsReturnTypeInvalid :: boolean()}}
-           | {'opaque_mismatch', erl_types:erl_type()}
            | {'overlapping_contract', [module() | atom() | byte()]}
            | string()}
       | {'range_warnings',

@@ -373,7 +373,6 @@
 -define(list_union(T),       ?union([?none,?none,?none,?none,T,?none,?none,?none])).
 -define(number_union(T),     ?union([?none,?none,?none,?none,?none,T,?none,?none])).
 -define(tuple_union(T),      ?union([?none,?none,?none,?none,?none,?none,T,?none])).
--define(opaque_union(T),     ?union([?none,?none,?none,?none,?none,?none,?none,?none])).
 -define(map_union(T),        ?union([?none,?none,?none,?none,?none,?none,?none,T])).
 -define(integer_union(T),    ?number_union(T)).
 -define(float_union(T),      ?number_union(T)).

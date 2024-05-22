@@ -657,8 +657,8 @@ is_int_float_eq_comp(T1, Op, T2) ->
      (t_is_integer(T1)
       andalso erl_types:t_is_float(T2))).
 
-comp_format_args([1|_], T1, Op, T2, State) ->
-  [format_type(T2, State), Op, format_type(T1, State)];
+% comp_format_args([1|_], T1, Op, T2, State) ->
+%   [format_type(T2, State), Op, format_type(T1, State)];
 comp_format_args(_, T1, Op, T2, State) ->
   [format_type(T1, State), Op, format_type(T2, State)].
 
@@ -1141,7 +1141,7 @@ do_clause(C, Arg, ArgType, OrigArgType, Map, State, Warns) ->
       end
   end.
 
-clause_error(State, Map, {error, maybe_covered, OrigArgType, _, _}, C, Pats, _) ->
+clause_error(State, Map, {error, maybe_covered, OrigArgType, _}, C, Pats, _) ->
   %% This clause is covered by previous clauses, but it is possible
   %% that it would never match anyway. Find out by matching the
   %% original argument types of the case.
