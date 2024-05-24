@@ -3628,9 +3628,9 @@ t_to_string(?int_range(From, To), _RecDict) ->
   flat_format("~w..~w", [From, To]);
 t_to_string(?integer(?any), _RecDict) -> "integer()";
 t_to_string(?float, _RecDict) -> "float()";
-t_to_string(?nominal(Name, Structure), RecDict) ->
+t_to_string(?nominal({Module, Name, _, _}, Structure), RecDict) ->
   StructureString = t_to_string(Structure, RecDict),
-  flat_format("nominal(~w, ~ts)", [Name, StructureString]);
+  flat_format("~w:~w(), ~ts)", [Module, Name, StructureString]);
 t_to_string(?nominal_set(T, S), RecDict) ->
   union_sequence([N || N <- [S|T], N =/= ?none], RecDict);
 t_to_string(?number(?any, ?unknown_qual), _RecDict) -> "number()";
