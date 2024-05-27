@@ -466,16 +466,17 @@ handle_apply_or_call([{TypeOfApply, {Fun, Sig, Contr, LocalRet}}|Left],
   ?debug("NewArgTypes ~ts\n", [erl_types:t_to_string(t_product(NewArgTypes))]),
   ?debug("\n", []),
 
-%   case any_none(NewArgsContract) of
-%     false ->
-%       case erl_types:t_opacity_conflict(erl_types:t_product(ArgTypes),
-%                                         erl_types:t_product(CArgs),
-%                                         State#state.module) of
-%         true -> io:format("~p~n", [{opacity_conflict, ArgTypes, CArgs, State#state.module, state__lookup_name(Fun, State)}]);
-%         false -> ok
-%       end;
-%     true -> ok
-%   end,
+  case any_none(NewArgsContract) of
+      false ->
+       case erl_types:t_opacity_conflict(erl_types:t_product(ArgTypes),
+                                         erl_types:t_product(CArgs),
+                                         State#state.module) of
+         true -> io:format("~p~n", [{opacity_conflict, ArgTypes, CArgs, State#state.module, state__lookup_name(Fun, State)}]);
+         false -> ok
+       end;
+       true -> ok
+  end,
+
 
   BifRet = BifRange(NewArgTypes),
   ContrRet = CRange(NewArgTypes),
@@ -517,7 +518,7 @@ handle_apply_or_call([{TypeOfApply, {Fun, Sig, Contr, LocalRet}}|Left],
 	      any_none([CRange(NewArgsContract)|NewArgsContract]),
 	    FailedBif = any_none([BifRange(NewArgsBif)|NewArgsBif]),
 	    InfSig = t_inf(t_fun(SigArgs, SigRange),
-                           t_fun(BifArgs, BifRange(BifArgs))),
+                           t_fun(BifArgs, BifRange(BifArgs))),                        
 	    FailReason =
 	      apply_fail_reason(FailedSig, FailedBif, FailedContract),
 	    Msg = get_apply_fail_msg(Fun, Args, ArgTypes, NewArgTypes, InfSig,
@@ -535,7 +536,17 @@ handle_apply_or_call([{TypeOfApply, {Fun, Sig, Contr, LocalRet}}|Left],
             Frc = {erlang, is_record, 3} =:= state__lookup_name(Fun, State),
 	    state__add_warning(State, WarnType, LocTree, Msg, Frc)
 	end;
-      false -> State
+      false -> 
+        case erl_types:t_opacity_conflict(erl_types:t_product(ArgTypes),
+                                         erl_types:t_product(CArgs),
+                                         State#state.module) of
+         true -> 
+          {M1, F1, A1} = state__lookup_name(Fun, State),
+          state__add_warning(State, ?WARN_OPAQUE, Tree, {call_with_opaque, [M1, F1, A1, ArgTypes, CArgs]}),
+          State;
+          %io:format("~p~n", [{opacity_conflict, ArgTypes, CArgs, State#state.module, state__lookup_name(Fun, State)}]);
+         false -> State
+       end
     end,
   State3 =
     case TypeOfApply of
@@ -1021,7 +1032,7 @@ handle_tuple(Tree, Map, State) ->
                     false ->
                       case bind_pat_vars(Elements, t_tuple_args(RecType),
                                          Map1, State1) of
-                        {error, bind, ErrorPat, ErrorType, _} ->
+                        {error, bind, ErrorPat, ErrorType} ->
                           Msg = {record_constr,
                                  [TagVal, format_patterns(ErrorPat),
                                   format_type(ErrorType, State1)]},
@@ -1029,7 +1040,7 @@ handle_tuple(Tree, Map, State) ->
                           State2 = state__add_warning(State1, ?WARN_MATCHING,
                                                       LocTree, Msg),
                           {State2, Map1, t_none()};
-                        {error, record, ErrorPat, ErrorType, _} ->
+                        {error, record, ErrorPat, ErrorType} ->
                           Msg = {record_match,
                                  [format_patterns(ErrorPat),
                                   format_type(ErrorType, State1)]},

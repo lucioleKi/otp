@@ -431,7 +431,7 @@ t_opacity_conflict(Given, Required, Module) ->
 oc_mark(?nominal({Mod, _Name, _Arity, Opacity}=Name, S0), Module) ->
   case (Opacity =:= transparent) orelse (Mod =:= Module) of
     true -> t_nominal(Name, oc_mark(S0, Module));
-    false -> t_nominal(Name, ?opaque)
+    false -> ?opaque
   end;
 oc_mark(?nominal_set(Ns, Other), Module) ->
   normalize_nominal_set([oc_mark(N, Module) || N <- Ns],
@@ -3628,9 +3628,9 @@ t_to_string(?int_range(From, To), _RecDict) ->
   flat_format("~w..~w", [From, To]);
 t_to_string(?integer(?any), _RecDict) -> "integer()";
 t_to_string(?float, _RecDict) -> "float()";
-t_to_string(?nominal({Module, Name, _, _}, Structure), RecDict) ->
-  StructureString = t_to_string(Structure, RecDict),
-  flat_format("~w:~w(), ~ts)", [Module, Name, StructureString]);
+t_to_string(?nominal({Module, Name, _, _}, _Structure), _RecDict) ->
+  %StructureString = t_to_string(Structure, RecDict),
+  flat_format("~w:~w()", [Module, Name]);
 t_to_string(?nominal_set(T, S), RecDict) ->
   union_sequence([N || N <- [S|T], N =/= ?none], RecDict);
 t_to_string(?number(?any, ?unknown_qual), _RecDict) -> "number()";
