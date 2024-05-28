@@ -466,16 +466,16 @@ handle_apply_or_call([{TypeOfApply, {Fun, Sig, Contr, LocalRet}}|Left],
   ?debug("NewArgTypes ~ts\n", [erl_types:t_to_string(t_product(NewArgTypes))]),
   ?debug("\n", []),
 
-  case any_none(NewArgsContract) of
-      false ->
-       case erl_types:t_opacity_conflict(erl_types:t_product(ArgTypes),
-                                         erl_types:t_product(CArgs),
-                                         State#state.module) of
-         true -> io:format("~p~n", [{opacity_conflict, ArgTypes, CArgs, State#state.module, state__lookup_name(Fun, State)}]);
-         false -> ok
-       end;
-       true -> ok
-  end,
+  % case any_none(NewArgsContract) of
+  %     false ->
+  %      case erl_types:t_opacity_conflict(erl_types:t_product(ArgTypes),
+  %                                        erl_types:t_product(CArgs),
+  %                                        State#state.module) of
+  %        true -> io:format("~p~n", [{opacity_conflict, ArgTypes, CArgs, State#state.module, state__lookup_name(Fun, State)}]);
+  %        false -> ok
+  %      end;
+  %      true -> ok
+  % end,
 
 
   BifRet = BifRange(NewArgTypes),
@@ -536,15 +536,16 @@ handle_apply_or_call([{TypeOfApply, {Fun, Sig, Contr, LocalRet}}|Left],
             Frc = {erlang, is_record, 3} =:= state__lookup_name(Fun, State),
 	    state__add_warning(State, WarnType, LocTree, Msg, Frc)
 	end;
-      false -> 
+      false ->        
         case erl_types:t_opacity_conflict(erl_types:t_product(ArgTypes),
                                          erl_types:t_product(CArgs),
                                          State#state.module) of
-         true -> 
-          {M1, F1, A1} = state__lookup_name(Fun, State),
-          state__add_warning(State, ?WARN_OPAQUE, Tree, {call_with_opaque, [M1, F1, A1, ArgTypes, CArgs]}),
-          State;
-          %io:format("~p~n", [{opacity_conflict, ArgTypes, CArgs, State#state.module, state__lookup_name(Fun, State)}]);
+        true -> 
+          {M1, F1, _} = state__lookup_name(Fun, State),
+          ArgStrings = format_args(Args, ArgTypes, State),
+          ANs = check_conflicts(ArgTypes, CArgs, 1, State#state.module),
+          % an opaque term is used where a structured term is expected, or the other way around
+          state__add_warning(State, ?WARN_OPAQUE, Tree, {call_with_opaque, [M1, F1, ArgStrings, ANs, CArgs]});
          false -> State
        end
     end,
@@ -600,6 +601,13 @@ handle_apply_or_call([], Args, _ArgTypes, Map, _Tree, State,
       {had_external, State1}
   end.
 
+check_conflicts([A | As], [C | Cs], N, Module) -> 
+  case erl_types:t_opacity_conflict(A, C, Module) of 
+    true -> [N | check_conflicts(As, Cs, N + 1, Module)]; 
+    false -> check_conflicts(As, Cs, N + 1, Module) 
+  end; 
+check_conflicts([],[], _, _) -> [].
+
 apply_fail_reason(FailedSig, FailedBif, FailedContract) ->
   if
     (FailedSig orelse FailedBif) andalso (not FailedContract) -> only_sig;
@@ -642,19 +650,31 @@ add_bif_warnings({erlang, Op, 2}, [T1, T2] = Ts, Tree, State)
     andalso (not is_int_float_eq_comp(T1, Op, T2))
   of
     true ->
-      Args = comp_format_args([], T1, Op, T2, State),
-      state__add_warning(State, ?WARN_MATCHING, Tree, {exact_eq, Args});
+      case not t_is_none(Inf) andalso erl_types:t_opacity_conflict(T1, T2, State#state.module) of
+        true -> 
+          Args = comp_format_args([], T1, Op, T2, State),
+	        state__add_warning(State, ?WARN_OPAQUE, Tree, {opaque_eq, Args});
+        false -> 
+          Args = comp_format_args([], T1, Op, T2, State),
+          state__add_warning(State, ?WARN_MATCHING, Tree, {exact_eq, Args})
+      end;
     false ->
       State
   end;
-add_bif_warnings({erlang, Op, 2}, [T1, T2] = Ts, _Tree, State)
+add_bif_warnings({erlang, Op, 2}, [T1, T2] = Ts, Tree, State)
   when Op =:= '=/='; Op =:= '/=' ->
   case
     (not any_none(Ts))
     andalso (not is_int_float_eq_comp(T1, Op, T2))
   of
     true ->
-      State;
+      case erl_types:t_opacity_conflict(T1, T2, State#state.module) of
+        true -> 
+          Args = comp_format_args([], T1, Op, T2, State),
+	        State1 = state__add_warning(State, ?WARN_OPAQUE, Tree, {opaque_neq, Args}),
+          State1;
+        false -> State
+      end;
     false ->
       State
   end;
@@ -734,13 +754,28 @@ handle_bitstr(Tree, Map, State) ->
 	  UnitVal = cerl:concrete(cerl:bitstr_unit(Tree)),
           NumberVals = t_number_vals(SizeType),
           {State3, Type} =
+            %TODO: fix this logic
+            case not t_is_impossible(t_inf(SizeType, ValType)) andalso erl_types:t_opacity_conflict(SizeType, ValType, State#state.module) of
+              true ->
+                Msg = {opaque_size, [format_type(SizeType, State2),
+                                     format_cerl(Size)]},
+                State4 = {state__add_warning(State2, ?WARN_OPAQUE, Size, Msg)},
+              case NumberVals of
+               [OneSize] -> {State4, t_bitstr(0, OneSize * UnitVal)};
+               unknown -> {State4, t_bitstr()};
+               _ ->
+                 MinSize = erl_types:number_min(SizeType),
+                 {State4, t_bitstr(UnitVal, UnitVal * MinSize)}
+             end;
+              false ->
              case NumberVals of
                [OneSize] -> {State2, t_bitstr(0, OneSize * UnitVal)};
                unknown -> {State2, t_bitstr()};
                _ ->
                  MinSize = erl_types:number_min(SizeType),
                  {State2, t_bitstr(UnitVal, UnitVal * MinSize)}
-             end,
+             end
+            end,
 	  Map3 = enter_type_lists([Val, Size, Tree],
 				  [ValType, SizeType, Type], Map2),
 	  {State3, Map3, Type}
@@ -1185,10 +1220,10 @@ failed_msg(State, ErrorType, Pats, Type, NewPats, NewType) ->
       bind ->
         {pattern_match, [format_patterns(Pats), format_type(Type, State)]};
       record ->
-        {record_match, [format_patterns(NewPats), format_type(NewType, State)]}
-      % opaque ->
-      %   {opaque_match, [format_patterns(NewPats), format_type(NewType, State),
-      %                   format_type(OpaqueTerm, State)]}
+        {record_match, [format_patterns(NewPats), format_type(NewType, State)]};
+      opaque ->
+        {opaque_match, [format_patterns(NewPats), format_type(Type, State),
+                        format_type(NewType, State)]}
     end.
 
 clause_error_warning(Msg, Force, C) ->
@@ -1330,24 +1365,24 @@ do_bind_pat_vars([Pat|Pats], [Type|Types], Map, State, Rev, Acc) ->
             %% symmetric.
             {Map, t_bitstr()};
 	  false ->
-            BinType = bind_checked_inf(Pat, t_bitstr(), Type),
+            {BinType, State1} = bind_checked_inf(Pat, t_bitstr(), Type, State),
             Segs = cerl:binary_segments(Pat),
-            {Map1, SegTypes} = bind_bin_segs(Segs, BinType, Map, State),
+            {Map1, SegTypes} = bind_bin_segs(Segs, BinType, Map, State1),
             {Map1, t_bitstr_concat(SegTypes)}
 	end;
       cons ->
-        Cons = bind_checked_inf(Pat, t_cons(), Type),
+        {Cons, State1} = bind_checked_inf(Pat, t_cons(), Type, State),
         {Map1, [HdType, TlType]} =
           do_bind_pat_vars([cerl:cons_hd(Pat), cerl:cons_tl(Pat)],
                            [t_cons_hd(Cons),
                             t_cons_tl(Cons)],
-                           Map, State, Rev, []),
+                           Map, State1, Rev, []),
         {Map1, t_cons(HdType, TlType)};
       literal ->
 	Pat0 = dialyzer_utils:refold_pattern(Pat),
 	case cerl:is_literal(Pat0) of
 	  true ->
-            LiteralType = bind_checked_inf(Pat, literal_type(Pat), Type),
+            {LiteralType, _State1} = bind_checked_inf(Pat, literal_type(Pat), Type, State),
             {Map, LiteralType};
 	  false ->
             {Map1, [PatType]} = do_bind_pat_vars([Pat0], [Type], Map, State, Rev, []),
@@ -1369,7 +1404,7 @@ do_bind_pat_vars([Pat|Pats], [Type|Types], Map, State, Rev, Acc) ->
 	    {ok, RecType} -> RecType
 	  end,
 	%% Must do inf when binding args to pats. Vars in pats are fresh.
-        VarType2 = bind_checked_inf(Pat, VarType1, Type),
+        {VarType2, _State1} = bind_checked_inf(Pat, VarType1, Type, State),
         Map1 = enter_type(Pat, VarType2, Map),
         {Map1, VarType2};
       _Other ->
@@ -1383,7 +1418,7 @@ do_bind_pat_vars([], [], Map, _State, _Rev, Acc) ->
   {Map, lists:reverse(Acc)}.
 
 bind_map(Pat, Type, Map, State, Rev) ->
-  MapT = bind_checked_inf(Pat, t_map(), Type),
+  {MapT, State1} = bind_checked_inf(Pat, t_map(), Type, State),
   case Rev of
     %% TODO: Reverse matching (propagating a matched subset back to a value).
     true ->
@@ -1397,7 +1432,7 @@ bind_map(Pat, Type, Map, State, Rev) ->
             KeyType =
               case cerl:type(Key) of
                 var ->
-                  case state__lookup_type_for_letrec(Key, State) of
+                  case state__lookup_type_for_letrec(Key, State1) of
                     error -> lookup_type(Key, MapAcc);
                     {ok, RecType} -> RecType
                   end;
@@ -1407,7 +1442,7 @@ bind_map(Pat, Type, Map, State, Rev) ->
             Bind = erl_types:t_map_get(KeyType, MapT),
             {MapAcc1, [ValType]} =
               do_bind_pat_vars([cerl:map_pair_val(Pair)],
-                               [Bind], MapAcc, State, Rev, []),
+                               [Bind], MapAcc, State1, Rev, []),
             case t_is_singleton(KeyType) of
               true  -> {MapAcc1, [{KeyType, ValType}|ListAcc]};
               false -> {MapAcc1, ListAcc}
@@ -1440,11 +1475,11 @@ bind_tuple(Pat, Type, Map, State, Rev) ->
             {false, t_tuple(length(Es))}
         end
     end,
-  Tuple = bind_checked_inf(Pat, Prototype, Type),
+  {Tuple, State1} = bind_checked_inf(Pat, Prototype, Type, State),
   SubTuples = t_tuple_subtypes(Tuple),
   MapJ = join_maps_begin(Map),
   %% Need to call the top function to get the try-catch wrapper.
-  Results = [bind_pat_vars(Es, t_tuple_args(SubTuple), MapJ, State, Rev) ||
+  Results = [bind_pat_vars(Es, t_tuple_args(SubTuple), MapJ, State1, Rev) ||
               SubTuple <- SubTuples],
   case [M || {M, _} <- Results, M =/= error] of
     [] ->
@@ -1541,11 +1576,18 @@ bitstr_bitsize_type(Size) ->
 
 %% Return the infimum (meet) of ExpectedType and Type if it describes a
 %% possible value (not 'none' or 'unit'), otherwise raise a bind_error().
-bind_checked_inf(Pat, ExpectedType, Type) ->
+bind_checked_inf(Pat, ExpectedType, Type, State) ->
   Inf = t_inf(ExpectedType, Type),
   case t_is_impossible(Inf) of
-    true -> bind_error([Pat], Type, Inf, bind);
-    false -> Inf
+    true -> {bind_error([Pat], Type, Inf, bind), State};
+    false -> 
+      case erl_types:t_opacity_conflict(ExpectedType, Type, State#state.module) of
+        true -> 
+          Msg = failed_msg(State, opaque, Pat, ExpectedType, [Pat], Inf),
+          State1 = state__add_warning(State, ?WARN_OPAQUE, Pat, Msg),
+          {Inf, State1};
+        false -> {Inf, State}
+      end
   end.
 
 bind_error(Pats, Type, _Inf, Error0) ->
