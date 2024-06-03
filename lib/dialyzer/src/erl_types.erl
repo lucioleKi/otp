@@ -158,6 +158,7 @@
 	 t_number/1,
 	 t_number_vals/1,
          t_opacity_conflict/3,
+         t_union_with_opaque/1,
 	 t_pid/0,
 	 t_port/0,
 	 t_maybe_improper_list/0,
@@ -296,7 +297,7 @@
             elements  = []            :: term(),
             qualifier = ?unknown_qual :: qual()}).
 
--opaque erl_type() :: ?any | ?none | ?unit | ?opaque | #c{}.
+-nominal erl_type() :: ?any | ?none | ?unit | ?opaque | #c{}.
 
 %%-----------------------------------------------------------------------------
 %% Auxiliary types and convenient macros
@@ -458,6 +459,18 @@ oc_mark(?map(Pairs, DefK, DefV), Module) ->
         oc_mark(DefV, Module));
 oc_mark(T, _) ->
   T.
+
+%% Returns true if Type is a nominal set containing at least one opaque type and one non-opaque type, false otherwise
+-spec t_union_with_opaque(term()) -> boolean().
+t_union_with_opaque(?nominal_set(Ns, Other)) ->
+  %% check whether a nominal set is OK
+  true = opaque < transparent, %Assertion.
+  case {lists:usort([{Kind, Mod} || {Mod, _, _, Kind} <- Ns]), t_is_none(Other)} of
+    {[{opaque, _}], true} -> false; %% only opaques from the same module
+    {[{transparent, _} | _], _} -> false; %% transparent nominals with optional other component
+    {_, _} -> true
+  end;
+t_union_with_opaque(_) -> false.
 
 %%-----------------------------------------------------------------------------
 %% Unit type. Signals non termination.
@@ -3628,10 +3641,18 @@ t_to_string(?int_range(From, To), _RecDict) ->
   flat_format("~w..~w", [From, To]);
 t_to_string(?integer(?any), _RecDict) -> "integer()";
 t_to_string(?float, _RecDict) -> "float()";
-t_to_string(?nominal({Module, Name, Arity, _}, _Structure), _RecDict) ->
+t_to_string(?nominal({Module, Name, Arity, _}, ?opaque), _RecDict) ->
   Modname = flat_format("~w:~tw", [Module, Name]),
   Args = lists:join($,, lists:duplicate(Arity, $_)),
   flat_format("~ts(~ts)", [Modname, Args]);
+t_to_string(?nominal({_Module, _Name, _Arity, opaque}, _) = N, _RecDict) -> 
+  t_to_string(oc_mark(N, "erl_types"));
+t_to_string(?nominal({Module, Name, Arity, _}, Structure), RecDict) ->
+  Modname = flat_format("~w:~tw", [Module, Name]),
+  Args = lists:join($,, lists:duplicate(Arity, $_)),
+  Namearity = flat_format("~ts(~ts)", [Modname, Args]),
+  StructureString = t_to_string(Structure, RecDict),
+  flat_format("(~ts :: ~ts)", [Namearity, StructureString]);
 t_to_string(?nominal_set(T, S), RecDict) ->
   union_sequence([N || N <- [S|T], N =/= ?none], RecDict);
 t_to_string(?number(?any, ?unknown_qual), _RecDict) -> "number()";

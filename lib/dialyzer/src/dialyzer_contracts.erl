@@ -270,6 +270,7 @@ check_contracts(Contracts, Callgraph, FunTypes) ->
       | {'error',
              'invalid_contract'
            | {'invalid_contract', {InvalidArgIdxs :: [pos_integer()], IsReturnTypeInvalid :: boolean()}}
+           | {'opaque_union', erl_types:erl_type()}
            | {'overlapping_contract', [module() | atom() | byte()]}
            | string()}
       | {'range_warnings',
@@ -288,6 +289,7 @@ check_contract(#contract{contracts = Contracts}, SuccType) ->
 		  || {Contract, Map} <- Contracts1],
     GenDomains = [erl_types:t_fun_args(C) || C <- Contracts2],
     case check_domains(GenDomains) of
+      {error, {opaque_union, Dom}} -> {error, {opaque_union, Dom}};
       error ->
 	{error, {overlapping_contract, []}};
       ok ->
@@ -338,7 +340,14 @@ check_domains([Dom|Doms]) ->
 	    erl_types:any_none_or_unit(erl_types:t_inf_lists(Dom, D))
 	end,
   case lists:all(Fun, Doms) of
-    true -> check_domains(Doms);
+    true -> 
+      case erl_types:t_union_with_opaque(Dom) of 
+          true -> 
+            io:format("check domain"),
+            {error, {opaque_union, Dom}};
+          false -> 
+            check_domains(Doms)
+        end;
     false -> error
   end.
 
@@ -527,7 +536,12 @@ insert_constraints([{subtype, Type1, Type2}|Left], Map) ->
                {ok, VarType} ->
                  maps:put(Name, erl_types:t_inf(VarType, Type2), Map)
              end,
-      insert_constraints(Left, Map1);
+      case erl_types:t_union_with_opaque(Type2) of 
+          true -> 
+            throw({error, {opaque_union, Type2}}),
+            insert_constraints(Left, Map1);
+          false -> insert_constraints(Left, Map1)
+        end;
     false ->
       %% A lot of things should change to add supertypes
       throw({error, io_lib:format("First argument of is_subtype constraint "
@@ -570,7 +584,12 @@ contract_from_form([{type, _, 'fun', [_, _]} = Form | Left], Module, MFA,
 	      throw({error, NewMsg})
 	  end,
         NewTypeNoVars = erl_types:subst_all_vars_to_any(NewType),
-	{{NewTypeNoVars, []}, NewCache}
+        case erl_types:t_union_with_opaque(NewTypeNoVars) of 
+          true -> 
+            throw({error, {opaque_union, NewTypeNoVars}}),
+            {{NewTypeNoVars, []}, NewCache};
+          false -> {{NewTypeNoVars, []}, NewCache}
+        end
     end,
   NewTypeAcc = [TypeFun | TypeAcc],
   NewFormAcc = [{Form, []} | FormAcc],
@@ -827,6 +846,9 @@ get_invalid_contract_warnings_funs([{MFA, {FileLocation, Contract, _Xtra}}|Left]
 	    [invalid_contract_warning(MFA, WarningInfo, none, Contract, Sig, RecDict)|Acc];
 	  {error, {invalid_contract, {_ProblematicArgIdxs, _IsRangeProblematic} = ProblemDetails}} ->
 	    [invalid_contract_warning(MFA, WarningInfo, ProblemDetails, Contract, Sig, RecDict)|Acc];
+    {error, {opaque_union, OpaqueType}} ->
+      {M, F, A} = MFA,
+      [{?WARN_OPAQUE, WarningInfo, {contract_with_opaque, [M, F, A, OpaqueType]}}|Acc];
 	  {error, {overlapping_contract, []}} ->
 	    [overlapping_contract_warning(MFA, WarningInfo)|Acc];
 	  {range_warnings, Errors} ->

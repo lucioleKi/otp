@@ -888,12 +888,11 @@ message_to_string({invalid_contract, [M, F, A, InvalidContractDetails, Contract,
 		" But the spec is ~ts\n"
 		"~ts",
     [M, F, A, con(M, F, Sig, I), con(M, F, Contract, I), format_invalid_contract_details(InvalidContractDetails)]);
-message_to_string({contract_with_opaque, [M, F, A, OpaqueType, SigType]},
+message_to_string({contract_with_opaque, [M, F, A, OpaqueType]},
                  I, _E) ->
   io_lib:format("The specification for ~w:~tw/~w"
-                " has an opaque subtype ~ts which is violated by the"
-                " success typing ~ts\n",
-                [M, F, A, t(OpaqueType, I), sig(SigType, I)]);
+                " contains opaque type(s) ~ts in a union with non-opaque type(s)\n",
+                [M, F, A, t(OpaqueType, I)]);
 message_to_string({extra_range, [M, F, A, ExtraRanges, SigRange]}, I, _E) ->
   io_lib:format("The specification for ~w:~tw/~w states that the function"
 		" might also return ~ts but the inferred return is ~ts\n",
