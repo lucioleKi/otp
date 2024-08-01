@@ -33,7 +33,7 @@ all() ->
                    analyse_no_beam, line_0, compile_beam_no_file,
                    compile_beam_missing_backend,
                    otp_13277, otp_13289, guard_in_lc, gh_4796,
-                   eep49, gh_8159],
+                   eep49, gh_8159, otp_8661],
     StartStop = [start, compile, analyse, misc, stop,
                  distribution, reconnect, die_and_reconnect,
                  dont_reconnect_after_stop, stop_node_after_disconnect,
@@ -1986,6 +1986,43 @@ gh_8159(Config) ->
 
     not_ok = M:aaa(),
     {ok,[{{M,3},1}]} = cover:analyse(M, calls, line),
+
+    ok = file:delete(File),
+
+    ok.
+
+otp_8661(Config) ->
+    Outdir = proplists:get_value(priv_dir, Config),
+    ok = file:set_cwd(Outdir),
+    ExportFile = filename:join(Outdir, "reload_data.export"),
+
+    M = reload_data,
+    File = atom_to_list(M) ++ ".erl",
+
+    Test = ~"""
+            -module(reload_data).
+            -export([aaa/0, bbb/0, ccc/0]).
+            bbb() -> ok. aaa() -> not_ok. ccc() -> cool.
+            """,
+    ok = file:write_file(File, Test),
+
+    {ok, M} = compile:file(File, [debug_info]),
+    {ok, M} = cover:compile_beam(filename:rootname(File)),
+    cool = M:ccc(),
+    ok = cover:export(ExportFile),
+
+    Test1 = ~"""
+            -module(reload_data).
+            -export([bbb/0]).
+            bbb() -> ok.
+            """,
+    ok = file:write_file(File, Test1),
+
+    {ok, M} = compile:file(File, [debug_info]),
+    {module, M} = code:load_file(M),
+
+    %% With spawn used in cover:export, we expect an error tuple.
+    {error, {not_cover_compiled, M}} = cover:export(ExportFile),
 
     ok = file:delete(File),
 
