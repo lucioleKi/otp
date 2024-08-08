@@ -3535,12 +3535,13 @@ behaviour_multiple(Config) when is_list(Config) ->
 
 	  {behaviour4,
            <<"-behaviour(gen_server).
-              -behaviour(gen_fsm).
+              -behaviour(gen_statem).
               -behaviour(supervisor).
               -export([init/1,handle_call/3,handle_cast/2,
                        handle_info/2,handle_info/3,
                        handle_event/3,handle_sync_event/4,
                        code_change/3,code_change/4,
+                       callback_mode/0,
                        terminate/2,terminate/3,terminate/4]).
               init(_) -> ok.
               handle_call(_, _, _) -> ok.
@@ -3551,6 +3552,7 @@ behaviour_multiple(Config) when is_list(Config) ->
               handle_info(_, _, _) -> ok.
               code_change(_, _, _) -> ok.
               code_change(_, _, _, _) -> ok.
+              callback_mode() -> ok.
               terminate(_, _) -> ok.
               terminate(_, _, _) -> ok.
               terminate(_, _, _, _) -> ok.
@@ -3558,7 +3560,7 @@ behaviour_multiple(Config) when is_list(Config) ->
            [],
 	   {warnings,[{{2,16},
 		       erl_lint,
-		       {conflicting_behaviours,{init,1},gen_fsm,{1,22},gen_server}},
+		       {conflicting_behaviours,{init,1},gen_statem,{1,22},gen_server}},
 		      {{3,16},
 		       erl_lint,
 		       {conflicting_behaviours,{init,1},supervisor,{1,22},gen_server}}]}}
