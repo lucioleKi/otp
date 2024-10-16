@@ -1018,7 +1018,7 @@ handle_tuple(Tree, Map, State) ->
 	      TagVal = cerl:atom_val(Tag),
               case state__lookup_record(TagVal, length(Left), State1) of
                 error -> {State1, Map1, TupleType};
-                {ok, RecType, _FieldNames} ->
+                {ok, RecType, FieldNames} ->
                   InfTupleType = t_inf(RecType, TupleType),
                   case t_is_none(InfTupleType) of
                     true ->
@@ -1041,6 +1041,18 @@ handle_tuple(Tree, Map, State) ->
                           State2 = state__add_warning(State1, ?WARN_MATCHING,
                                                       LocTree, Msg),
                           {State2, Map1, t_none()};
+                        {error, opaque, ErrorPat, ErrorType, OpaqueType} ->
+                          OpaqueStr = format_type(OpaqueType, State1),
+                          Name = field_name(Elements, ErrorPat, FieldNames),
+                          Msg = {opaque_match,
+                                 ["record field" ++ Name ++
+                                  " declared to be of type " ++
+                                    format_type(ErrorType, State1),
+                                  OpaqueStr, OpaqueStr]},
+                          LocTree = hd(ErrorPat),
+                          State2 = state__add_warning(State1, ?WARN_OPAQUE,
+                                                      LocTree, Msg),
+                          {State2, Map1, t_none()};
                         {error, record, ErrorPat, ErrorType} ->
                           Msg = {record_match,
                                  [format_patterns(ErrorPat),
@@ -1059,6 +1071,15 @@ handle_tuple(Tree, Map, State) ->
 	[] ->
 	  {State1, Map1, t_tuple([])}
       end
+  end.
+
+field_name(Elements, ErrorPat, FieldNames) ->
+  try
+    [Pat] = ErrorPat,
+    Take = lists:takewhile(fun(X) -> X =/= Pat end, Elements),
+    " " ++ format_atom(lists:nth(length(Take), FieldNames))
+  catch
+    _:_ -> ""
   end.
 
 %%----------------------------------------
@@ -1199,6 +1220,8 @@ warn_type({Tag, _}) ->
   case Tag of
     guard_fail -> ?WARN_MATCHING;
     neg_guard_fail -> ?WARN_MATCHING;
+    opaque_guard -> ?WARN_OPAQUE;
+    opaque_match -> ?WARN_OPAQUE;
     pattern_match -> ?WARN_MATCHING;
     pattern_match_cov -> ?WARN_MATCHING;
     record_match -> ?WARN_MATCHING
@@ -1545,6 +1568,10 @@ bitstr_bitsize_type(Size) ->
 %% possible value (not 'none' or 'unit'), otherwise raise a bind_error().
 bind_checked_inf(Pat, ExpectedType, Type, State0) ->
   Inf = t_inf(ExpectedType, Type),
+  io:format("Inf~p~n", [Inf]),
+  io:format("Expected~p~n", [ExpectedType]),
+  io:format("Type~p~n", [Type]),
+  io:format("Module~p~n", [State0#state.module]),
   State = case erl_types:t_opacity_conflict(ExpectedType, Type, State0#state.module) of
             true -> 
               Msg = failed_msg(State0, opaque, Pat, ExpectedType, [Pat], Inf),
@@ -1881,15 +1908,23 @@ handle_guard_is_function(Guard, Map, Env, Eval, State) ->
       end
   end.
 
-handle_guard_is_record(Guard, Map, Env, Eval, State) ->
+handle_guard_is_record(Guard, Map, Env, Eval, State0) ->
   Args = cerl:call_args(Guard),
   [Rec, Tag0, Arity0] = Args,
   Tag = cerl:atom_val(Tag0),
   Arity = cerl:int_val(Arity0),
-  {Map1, RecType} = bind_guard(Rec, Map, Env, dont_know, State),
+  {Map1, RecType} = bind_guard(Rec, Map, Env, dont_know, State0),
   ArityMin1 = Arity - 1,
   Tuple = t_tuple([t_atom(Tag)|lists:duplicate(ArityMin1, t_any())]),
-  case t_is_none(t_inf(Tuple, RecType)) of
+  Inf = t_inf(Tuple, RecType),
+  State = case erl_types:t_opacity_conflict(RecType, Tuple, State0#state.module) of
+            true -> 
+              Msg = failed_msg(State0, opaque, RecType, Tuple, [RecType], Inf),
+              state__add_warning(State0, ?WARN_OPAQUE, RecType, Msg);
+            false ->
+              State0
+          end,
+  case t_is_none(Inf) of
     true ->
         case Eval of
           pos -> signal_guard_fail(Eval, Guard,
@@ -1910,8 +1945,7 @@ handle_guard_is_record(Guard, Map, Env, Eval, State) ->
         true ->
           %% No special handling of opaque errors.
           FArgs = "record " ++ format_type(RecType, State),
-          Msg = {record_matching, [FArgs, Tag]},
-          throw({fail, {Guard, Msg}});
+          throw({fail, {Guard, {record_matching, [FArgs, Tag]}}});
         false ->
           case Eval of
             pos -> {enter_type(Rec, Type, Map1), t_atom(true)};
@@ -1975,7 +2009,13 @@ bind_eq_guard(Guard, Arg1, Arg2, Map, Env, Eval, State) ->
     orelse t_is_atom(Type1) orelse t_is_atom(Type2)
   of
     true -> bind_eqeq_guard(Guard, Arg1, Arg2, Map, Env, Eval, State);
-    false -> {Map2, guard_eval_inf(Eval, t_boolean())}
+    false ->
+      case erl_types:t_opacity_conflict(Type1, Type2, State#state.module) of
+        true -> 
+          signal_guard_fail(Eval, Guard, [Type1, Type2], State);
+        false ->
+          {Map2, guard_eval_inf(Eval, t_boolean())}
+      end
   end.
 
 handle_guard_eqeq(Guard, Map, Env, Eval, State) ->
@@ -2288,12 +2328,17 @@ signal_guard_fatal_fail(Eval, Guard, ArgTypes, State) ->
 signal_guard_failure(Eval, Guard, ArgTypes, Tag, State) ->
   Args = cerl:call_args(Guard),
   F = cerl:atom_val(cerl:call_name(Guard)),
-  MFA = {cerl:atom_val(cerl:call_module(Guard)), F, length(Args)},
-  Kind =
-    case Eval of
-      neg -> neg_guard_fail;
-      pos -> guard_fail;
-      dont_know -> guard_fail
+  {M, F, A} = MFA = {cerl:atom_val(cerl:call_module(Guard)), F, length(Args)},
+  {Kind, XInfo} =
+    case erl_bif_types:opaque_args(M, F, A, ArgTypes) of
+      [] ->
+        {case Eval of
+          neg -> neg_guard_fail;
+          pos -> guard_fail;
+          dont_know -> guard_fail
+        end,
+        []};
+      Ns -> {opaque_guard, [Ns]}
     end,
   FArgs =
     case is_infix_op(MFA) of
@@ -2302,12 +2347,17 @@ signal_guard_failure(Eval, Guard, ArgTypes, Tag, State) ->
 	[Arg1, Arg2] = Args,
 	[format_args_1([Arg1], [ArgType1], State),
          atom_to_list(F),
-         format_args_1([Arg2], [ArgType2], State)];
+         format_args_1([Arg2], [ArgType2], State)] ++ XInfo;
       false ->
         [F, format_args(Args, ArgTypes, State)]
     end,
   Msg = {Kind, FArgs},
-  throw({Tag, {Guard, Msg}}).
+  LocTree =
+    case XInfo of
+      [] -> Guard;
+      [Ns1] -> select_arg(Ns1, Args, Guard)
+    end,
+  throw({Tag, {LocTree, Msg}}).
 
 is_infix_op({erlang, F, 2}) ->
   erl_internal:comp_op(F, 2);
@@ -3274,6 +3324,8 @@ map_pats(Pats) ->
 fold_literals(TreeList) ->
   [cerl:fold_literal(Tree) || Tree <- TreeList].
 
+format_atom(A) ->
+  format_cerl(cerl:c_atom(A)).
 
 type(Tree) ->
   Folded = cerl:fold_literal(Tree),
