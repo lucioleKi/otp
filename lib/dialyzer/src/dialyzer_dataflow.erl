@@ -1199,6 +1199,8 @@ warn_type({Tag, _}) ->
   case Tag of
     guard_fail -> ?WARN_MATCHING;
     neg_guard_fail -> ?WARN_MATCHING;
+    opaque_guard -> ?WARN_OPAQUE;
+    opaque_match -> ?WARN_OPAQUE;
     pattern_match -> ?WARN_MATCHING;
     pattern_match_cov -> ?WARN_MATCHING;
     record_match -> ?WARN_MATCHING
@@ -1881,15 +1883,23 @@ handle_guard_is_function(Guard, Map, Env, Eval, State) ->
       end
   end.
 
-handle_guard_is_record(Guard, Map, Env, Eval, State) ->
+handle_guard_is_record(Guard, Map, Env, Eval, State0) ->
   Args = cerl:call_args(Guard),
   [Rec, Tag0, Arity0] = Args,
   Tag = cerl:atom_val(Tag0),
   Arity = cerl:int_val(Arity0),
-  {Map1, RecType} = bind_guard(Rec, Map, Env, dont_know, State),
+  {Map1, RecType} = bind_guard(Rec, Map, Env, dont_know, State0),
   ArityMin1 = Arity - 1,
   Tuple = t_tuple([t_atom(Tag)|lists:duplicate(ArityMin1, t_any())]),
-  case t_is_none(t_inf(Tuple, RecType)) of
+  Inf = t_inf(Tuple, RecType),
+  State = case erl_types:t_opacity_conflict(RecType, Tuple, State0#state.module) of
+            true -> 
+              Msg = failed_msg(State0, opaque, RecType, Tuple, [RecType], Inf),
+              state__add_warning(State0, ?WARN_OPAQUE, RecType, Msg);
+            false ->
+              State0
+          end,
+  case t_is_none(Inf) of
     true ->
         case Eval of
           pos -> signal_guard_fail(Eval, Guard,
@@ -1910,8 +1920,7 @@ handle_guard_is_record(Guard, Map, Env, Eval, State) ->
         true ->
           %% No special handling of opaque errors.
           FArgs = "record " ++ format_type(RecType, State),
-          Msg = {record_matching, [FArgs, Tag]},
-          throw({fail, {Guard, Msg}});
+          throw({fail, {Guard, {record_matching, [FArgs, Tag]}}});
         false ->
           case Eval of
             pos -> {enter_type(Rec, Type, Map1), t_atom(true)};
@@ -2288,13 +2297,19 @@ signal_guard_fatal_fail(Eval, Guard, ArgTypes, State) ->
 signal_guard_failure(Eval, Guard, ArgTypes, Tag, State) ->
   Args = cerl:call_args(Guard),
   F = cerl:atom_val(cerl:call_name(Guard)),
-  MFA = {cerl:atom_val(cerl:call_module(Guard)), F, length(Args)},
-  Kind =
-    case Eval of
-      neg -> neg_guard_fail;
-      pos -> guard_fail;
-      dont_know -> guard_fail
+  {M, F, A} = MFA = {cerl:atom_val(cerl:call_module(Guard)), F, length(Args)},
+  {Kind, XInfo} =
+    case erl_bif_types:opaque_args(M, F, A, ArgTypes) of
+      [] ->
+        {case Eval of
+          neg -> neg_guard_fail;
+          pos -> guard_fail;
+          dont_know -> guard_fail
+        end,
+        []};
+      Ns -> {opaque_guard, [Ns]}
     end,
+  io:format("XInfo~p~n", [XInfo]),
   FArgs =
     case is_infix_op(MFA) of
       true ->
@@ -2302,12 +2317,17 @@ signal_guard_failure(Eval, Guard, ArgTypes, Tag, State) ->
 	[Arg1, Arg2] = Args,
 	[format_args_1([Arg1], [ArgType1], State),
          atom_to_list(F),
-         format_args_1([Arg2], [ArgType2], State)];
+         format_args_1([Arg2], [ArgType2], State)] ++ XInfo;
       false ->
         [F, format_args(Args, ArgTypes, State)]
     end,
   Msg = {Kind, FArgs},
-  throw({Tag, {Guard, Msg}}).
+  LocTree =
+    case XInfo of
+      [] -> Guard;
+      [Ns1] -> select_arg(Ns1, Args, Guard)
+    end,
+  throw({Tag, {LocTree, Msg}}).
 
 is_infix_op({erlang, F, 2}) ->
   erl_internal:comp_op(F, 2);

@@ -116,6 +116,7 @@
 	 t_is_none/1,
 	 t_is_none_or_unit/1,
 	 t_is_number/1,
+   t_is_opaque/1,
 	 t_is_pid/1,
 	 t_is_port/1,
 	 t_is_maybe_improper_list/1,
@@ -1032,6 +1033,10 @@ t_nominal(Name, Type) ->
 t_is_nominal(?nominal(_,_)) -> true; 
 t_is_nominal(_) -> false. 
 
+-spec t_is_opaque(erl_type()) -> boolean().
+
+t_is_opaque(?nominal({_,_,_,opaque},_)) -> true; 
+t_is_opaque(_) -> false. 
 
 
 -spec t_list() -> erl_type().
