@@ -423,41 +423,56 @@ t_is_none(_) -> false.
                          Required :: erl_type(),
                          Module :: module()) -> boolean().
 t_opacity_conflict(Given, Required, Module) ->
-  %% The code below assumes that the actual types are compatible.
-  ?debug(not t_is_impossible(t_inf(Given, Required)),
-         {Given, Required, Module}),
-  t_is_impossible(t_inf(oc_mark(Given, Module),
-                        oc_mark(Required, Module))).
+  %% If the infimum of the Given and Required types is possible, we can detect
+  %% violations by checking whether the infimum becomes impossible with the
+  %% structural component of opaques replaced with ?opaque.
+  %%
+  %% Conversely, if the infimum is impossible, we can detect violations by
+  %% checking whether it becomes possible if the structural components are
+  %% replaced with ?any.
+  Direction = case t_is_impossible(t_inf(Given, Required)) of
+                true -> ?any;
+                false -> ?opaque
+              end,
+  case {t_is_impossible(t_inf(oc_mark(Given, Direction, Module),
+                              oc_mark(Required, Direction, Module))),
+        Direction} of
+    {true, ?opaque} -> true;
+    {false, ?any} -> true;
+    {_, _} -> false
+  end.
 
-oc_mark(?nominal({Mod, _Name, _Arity, Opacity}=Name, S0), Module) ->
+oc_mark(?nominal({Mod, _Name, _Arity, Opacity}=Name, S0), Direction, Module) ->
   case (Opacity =:= transparent) orelse (Mod =:= Module) of
-    true -> t_nominal(Name, oc_mark(S0, Module));
-    false -> t_nominal(Name, ?opaque)
+    true -> t_nominal(Name, oc_mark(S0, Direction, Module));
+    false -> t_nominal(Name, Direction)
   end;
-oc_mark(?nominal_set(Ns, Other), Module) ->
-  normalize_nominal_set([oc_mark(N, Module) || N <- Ns],
-                        oc_mark(Other, Module),
+oc_mark(?nominal_set(Ns, Other), Direction, Module) ->
+  normalize_nominal_set([oc_mark(N, Direction, Module) || N <- Ns],
+                        oc_mark(Other, Direction, Module),
                         []);
-oc_mark(?list(ElemT, Termination, Sz), Module) ->
-  ?list(oc_mark(ElemT, Module), oc_mark(Termination, Module), Sz);
-oc_mark(?tuple(?any, _, _) = T, _) -> T;
-oc_mark(?tuple(ArgTs, Sz, Tag), Module) when is_list(ArgTs) ->
-  ?tuple([oc_mark(A, Module) || A <- ArgTs], Sz, Tag);
-oc_mark(?tuple_set(Set0), Module) ->
-  ?tuple_set([{Sz, [oc_mark(T, Module) || T <- Tuples]}
+oc_mark(?list(ElemT, Termination, Sz), Direction, Module) ->
+  ?list(oc_mark(ElemT, Direction, Module),
+        oc_mark(Termination, Direction, Module), Sz);
+oc_mark(?tuple(?any, _, _) = T, _Direction, _Module) ->
+  T;
+oc_mark(?tuple(ArgTs, Sz, Tag), Direction, Module) when is_list(ArgTs) ->
+  ?tuple([oc_mark(A, Direction, Module) || A <- ArgTs], Sz, Tag);
+oc_mark(?tuple_set(Set0), Direction, Module) ->
+  ?tuple_set([{Sz, [oc_mark(T, Direction, Module) || T <- Tuples]}
               || {Sz, Tuples} <- Set0]);
-oc_mark(?product(Types), Module) ->
-  ?product([oc_mark(T, Module) || T <- Types]);
-oc_mark(?function(Domain, Range), Module) ->
-  ?function(oc_mark(Domain, Module), oc_mark(Range, Module));
-oc_mark(?union(U0), Module) ->
-  ?union([oc_mark(T, Module) || T <- U0]);
-oc_mark(?map(Pairs, DefK, DefV), Module) ->
+oc_mark(?product(Types), Direction, Module) ->
+  ?product([oc_mark(T, Direction, Module) || T <- Types]);
+oc_mark(?function(Domain, Range), Direction, Module) ->
+  ?function(oc_mark(Domain, Direction, Module), oc_mark(Range, Direction, Module));
+oc_mark(?union(U0), Direction, Module) ->
+  ?union([oc_mark(T, Direction, Module) || T <- U0]);
+oc_mark(?map(Pairs, DefK, DefV), Direction, Module) ->
   %% K is always a singleton, and thus can't contain any nominals.
-  t_map([{K, MNess, oc_mark(V, Module)} || {K, MNess, V} <- Pairs],
-        oc_mark(DefK, Module),
-        oc_mark(DefV, Module));
-oc_mark(T, _) ->
+  t_map([{K, MNess, oc_mark(V, Direction, Module)} || {K, MNess, V} <- Pairs],
+        oc_mark(DefK, Direction, Module),
+        oc_mark(DefV, Direction, Module));
+oc_mark(T, _Direction, _Module) ->
   T.
 
 %% Returns true if Type is a nominal set containing at least one opaque type and one non-opaque type, false otherwise
@@ -3686,7 +3701,7 @@ t_to_string(?nominal({Module, Name, Arity, _}, ?opaque), _RecDict) ->
   Args = lists:join($,, lists:duplicate(Arity, $_)),
   flat_format("~ts(~ts)", [Modname, Args]);
 t_to_string(?nominal({_Module, _Name, _Arity, opaque}, _) = N, _RecDict) -> 
-  t_to_string(oc_mark(N, "erl_types"));
+  t_to_string(oc_mark(N, ?opaque, "erl_types"));
 t_to_string(?nominal({Module, Name, Arity, _}, Structure), RecDict) ->
   Modname = flat_format("~w:~tw", [Module, Name]),
   Args = lists:join($,, lists:duplicate(Arity, $_)),

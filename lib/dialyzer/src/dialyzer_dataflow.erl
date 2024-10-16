@@ -723,34 +723,28 @@ handle_bitstr(Tree, Map, State) ->
 				      Offending, Msg),
 	  {State3, Map2, t_none()};
 	false ->
-	  UnitVal = cerl:concrete(cerl:bitstr_unit(Tree)),
+          UnitVal = cerl:concrete(cerl:bitstr_unit(Tree)),
           NumberVals = t_number_vals(SizeType),
-          {State3, Type} =
-            %TODO: fix this logic
-            case not t_is_impossible(t_inf(SizeType, ValType)) andalso erl_types:t_opacity_conflict(SizeType, ValType, State#state.module) of
-              true ->
-                Msg = {opaque_size, [format_type(SizeType, State2),
-                                     format_cerl(Size)]},
-                State4 = {state__add_warning(State2, ?WARN_OPAQUE, Size, Msg)},
-              case NumberVals of
-               [OneSize] -> {State4, t_bitstr(0, OneSize * UnitVal)};
-               unknown -> {State4, t_bitstr()};
-               _ ->
-                 MinSize = erl_types:number_min(SizeType),
-                 {State4, t_bitstr(UnitVal, UnitVal * MinSize)}
-             end;
-              false ->
-             case NumberVals of
-               [OneSize] -> {State2, t_bitstr(0, OneSize * UnitVal)};
-               unknown -> {State2, t_bitstr()};
-               _ ->
-                 MinSize = erl_types:number_min(SizeType),
-                 {State2, t_bitstr(UnitVal, UnitVal * MinSize)}
-             end
-            end,
-	  Map3 = enter_type_lists([Val, Size, Tree],
-				  [ValType, SizeType, Type], Map2),
-	  {State3, Map3, Type}
+          State3 = case erl_types:t_opacity_conflict(SizeType, ValType, State#state.module) of
+                     true ->
+                       Msg = {opaque_size, [format_type(SizeType, State2),
+                                            format_cerl(Size)]},
+                       state__add_warning(State2, ?WARN_OPAQUE, Size, Msg);
+                     false ->
+                      State2
+                   end,
+          {State4, Type} = case NumberVals of
+                              [OneSize] ->
+                                {State3, t_bitstr(0, OneSize * UnitVal)};
+                              unknown ->
+                                {State3, t_bitstr()};
+                              _ ->
+                                MinSize = erl_types:number_min(SizeType),
+                                {State3, t_bitstr(UnitVal, UnitVal * MinSize)}
+                           end,
+          Map3 = enter_type_lists([Val, Size, Tree],
+                                  [ValType, SizeType, Type], Map2),
+          {State4, Map3, Type}
       end
   end.
 
@@ -1549,18 +1543,18 @@ bitstr_bitsize_type(Size) ->
 
 %% Return the infimum (meet) of ExpectedType and Type if it describes a
 %% possible value (not 'none' or 'unit'), otherwise raise a bind_error().
-bind_checked_inf(Pat, ExpectedType, Type, State) ->
+bind_checked_inf(Pat, ExpectedType, Type, State0) ->
   Inf = t_inf(ExpectedType, Type),
+  State = case erl_types:t_opacity_conflict(ExpectedType, Type, State0#state.module) of
+            true -> 
+              Msg = failed_msg(State0, opaque, Pat, ExpectedType, [Pat], Inf),
+              state__add_warning(State0, ?WARN_OPAQUE, Pat, Msg);
+            false ->
+              State0
+           end,
   case t_is_impossible(Inf) of
     true -> {bind_error([Pat], Type, Inf, bind), State};
-    false -> 
-      case erl_types:t_opacity_conflict(ExpectedType, Type, State#state.module) of
-        true -> 
-          Msg = failed_msg(State, opaque, Pat, ExpectedType, [Pat], Inf),
-          State1 = state__add_warning(State, ?WARN_OPAQUE, Pat, Msg),
-          {Inf, State1};
-        false -> {Inf, State}
-      end
+    false -> {Inf, State}
   end.
 
 bind_error(Pats, Type, _Inf, Error0) ->
