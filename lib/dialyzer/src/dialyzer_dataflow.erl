@@ -1568,10 +1568,6 @@ bitstr_bitsize_type(Size) ->
 %% possible value (not 'none' or 'unit'), otherwise raise a bind_error().
 bind_checked_inf(Pat, ExpectedType, Type, State0) ->
   Inf = t_inf(ExpectedType, Type),
-  io:format("Inf~p~n", [Inf]),
-  io:format("Expected~p~n", [ExpectedType]),
-  io:format("Type~p~n", [Type]),
-  io:format("Module~p~n", [State0#state.module]),
   State = case erl_types:t_opacity_conflict(ExpectedType, Type, State0#state.module) of
             true -> 
               Msg = failed_msg(State0, opaque, Pat, ExpectedType, [Pat], Inf),

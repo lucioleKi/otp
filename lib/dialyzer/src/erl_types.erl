@@ -418,8 +418,8 @@ t_is_none(_) -> false.
 %% Opaque types
 %%
 
-%% Returns whether the `Given` type implicitly violates the opaque nominals of
-%% the `Required` type.
+%% Returns whether the `Given` type implicitly violates the opacity of opaque
+%% nominals of the `Required` type.
 -spec t_opacity_conflict(Given :: erl_type(),
                          Required :: erl_type(),
                          Module :: module()) -> boolean().
@@ -435,6 +435,13 @@ t_opacity_conflict(Given, Required, Module) ->
                 true -> ?any;
                 false -> ?opaque
               end,
+  case Module of
+    weird_warning3 -> 
+  io:format("1~p~n", [[t_is_impossible(t_inf(Given, Required)), Given, Required]]),
+  io:format("2~p~n", [[t_is_impossible(t_inf(oc_mark(Given, Direction, Module),
+                              oc_mark(Required, Direction, Module))), Direction, oc_mark(Given, Direction, Module), oc_mark(Required, Direction, Module)]]);
+    _ -> ok
+  end,
   case {t_is_impossible(t_inf(oc_mark(Given, Direction, Module),
                               oc_mark(Required, Direction, Module))),
         Direction} of
@@ -446,9 +453,7 @@ t_opacity_conflict(Given, Required, Module) ->
 oc_mark(?nominal({Mod, _Name, _Arity, Opacity}=Name, S0), Direction, Module) ->
   case (Opacity =:= transparent) orelse (Mod =:= Module) of
     true -> t_nominal(Name, oc_mark(S0, Direction, Module));
-    false ->
-      io:format("Marked~p~n", [t_nominal(Name, Direction)]),
-      t_nominal(Name, Direction)
+    false -> t_nominal(Name, Direction)
   end;
 oc_mark(?nominal_set(Ns, Other), Direction, Module) ->
   normalize_nominal_set([oc_mark(N, Direction, Module) || N <- Ns],
