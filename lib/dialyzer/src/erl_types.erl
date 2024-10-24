@@ -435,13 +435,6 @@ t_opacity_conflict(Given, Required, Module) ->
                 true -> ?any;
                 false -> ?opaque
               end,
-  case Module of
-    weird_warning3 -> 
-  io:format("1~p~n", [[t_is_impossible(t_inf(Given, Required)), Given, Required]]),
-  io:format("2~p~n", [[t_is_impossible(t_inf(oc_mark(Given, Direction, Module),
-                              oc_mark(Required, Direction, Module))), Direction, oc_mark(Given, Direction, Module), oc_mark(Required, Direction, Module)]]);
-    _ -> ok
-  end,
   case {t_is_impossible(t_inf(oc_mark(Given, Direction, Module),
                               oc_mark(Required, Direction, Module))),
         Direction} of
@@ -1044,7 +1037,6 @@ t_is_nominal(_) -> false.
 
 t_is_opaque(?nominal({_,_,_,opaque},_)) -> true; 
 t_is_opaque(_) -> false. 
-
 
 -spec t_list() -> erl_type().
 
