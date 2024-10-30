@@ -435,12 +435,16 @@ t_opacity_conflict(Given, Required, Module) ->
                 true -> ?any;
                 false -> ?opaque
               end,
+  ErrorType = case oc_mark(Required, Direction, Module) =:= Given of
+                true -> call_with_opaque;
+                false -> call_without_opaque
+              end,
   case {t_is_impossible(t_inf(oc_mark(Given, Direction, Module),
                               oc_mark(Required, Direction, Module))),
         Direction} of
-    {true, ?opaque} -> true;
-    {false, ?any} -> true;
-    {_, _} -> false
+    {true, ?opaque} -> ErrorType;
+    {false, ?any} -> ErrorType;
+    {_, _} -> no
   end.
 
 oc_mark(?nominal({Mod, _Name, _Arity, Opacity}=Name, S0), Direction, Module) ->
