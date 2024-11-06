@@ -30,6 +30,9 @@
 #
 # ubif:   Use for operators and guard BIFs.
 #
+# pbif:   Use for BIFs that can be called either as guard BIF or
+#         as call BIFs.
+#
 # hbif:   Use for BIFs that perform garbage collection or need up-to-date
 #         information on where they were called from. These must be called
 #         through the export entry.
