@@ -1893,6 +1893,14 @@ reduce_try_is([#b_set{op={succeeded,body}}=I0|Is], Acc) ->
     %% succeeded to the `guard`, since the try/catch will be removed.
     I = I0#b_set{op={succeeded,guard}},
     reduce_try_is(Is, [I|Acc]);
+reduce_try_is([#b_set{op=call,args=[#b_remote{mod=#b_literal{val=M},
+                        name=#b_literal{val=F},arity=A}|Args]}=I0|Is], Acc) ->
+    case erl_bifs:is_pure(M, F, A) of
+        true ->
+            I = I0#b_set{op={bif,F},args=Args},
+            reduce_try_is(Is, [I|Acc]);
+        false -> unsafe
+    end;
 reduce_try_is([#b_set{op=Op}=I|Is], Acc) ->
     IsSafe = case Op of
                  phi -> true;
