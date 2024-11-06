@@ -20,6 +20,7 @@
 -module(bif_SUITE).
 
 -include_lib("syntax_tools/include/merl.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -export([all/0,suite/0,groups/0,init_per_suite/1,end_per_suite/1,
 	 init_per_group/2,end_per_group/2,
@@ -28,7 +29,8 @@
          cover_trim/1,
          head_tail/1,
          min_max/1,
-         non_throwing/1]).
+         non_throwing/1,
+         non_throwing_pure/1]).
 
 suite() ->
     [{ct_hooks,[ts_install_cth]}].
@@ -45,7 +47,8 @@ groups() ->
        cover_trim,
        head_tail,
        min_max,
-       non_throwing
+       non_throwing,
+       non_throwing_pure
       ]}].
 
 init_per_suite(Config) ->
@@ -254,6 +257,7 @@ min_max(_Config) ->
 
     105 = num_clamped_add(5),
     105.0 = num_clamped_add(5.0),
+
     110 = num_clamped_add(a),
     110 = num_clamped_add({a,b,c}),
     110 = num_clamped_add({a,b,c}),
@@ -295,22 +299,110 @@ num_clamped_add(A) ->
     min(max(A, 0), 10) + 100.
 
 non_throwing(_Config) ->
-    a = try binary_to_atom(<<"a">>)
-        catch _:_ -> []
-        end,
-    l = try list_to_existing_atom([108])
-        catch _:_ -> []
-        end,
-    [] = try list_to_existing_atom([a])
-         catch _:_ -> []
-         end,
-    'Erlang' = try binary_to_atom(<<"Erlang">>, unicode)
-               catch _:_ -> []
-               end,
-    [] = try binary_to_existing_atom(a, unicode)
-         catch _:_ -> []
-         end,
+    abc = thing_to_atom(~"abc"),
+    [] = thing_to_atom(a),
+    [] = thing_to_atom(42),
+    [] = thing_to_atom([a,b,c]),
+
+    erlang = thing_to_existing_atom(~"erlang"),
+    [] = thing_to_existing_atom(~"not an existing atom"),
+    [] = thing_to_existing_atom(a),
+
     ok.
+
+thing_to_atom(Bin0) ->
+    Bin = id(Bin0),
+    Res = try
+              binary_to_atom(Bin)
+          catch
+              _:_ ->
+                  []
+          end,
+    Res = try
+              binary_to_atom(Bin, utf8)
+          catch
+              _:_ ->
+                  []
+          end,
+    if
+        is_atom(Res) ->
+            List = unicode:characters_to_list(Bin),
+            Res = try
+                      list_to_atom(List)
+                  catch
+                      _:_ ->
+                          []
+                  end;
+        true ->
+            Res
+    end.
+
+thing_to_existing_atom(Bin0) ->
+    Bin = id(Bin0),
+    Res = try
+              binary_to_existing_atom(Bin)
+          catch
+              _:_ ->
+                  []
+          end,
+    Res = try
+              binary_to_existing_atom(Bin, utf8)
+          catch
+              _:_ ->
+                  []
+          end,
+    if
+        is_atom(Res) ->
+            List = unicode:characters_to_list(Bin),
+            Res = try
+                      list_to_existing_atom(List)
+                  catch
+                      _:_ ->
+                          []
+                  end;
+        true ->
+            Res
+    end.
+
+non_throwing_pure(_Config) ->
+    [0] = bin2list(<<0>>),
+    error = bin2list(a),
+
+    ~"xyz" = list2bin("xyz"),
+    error = list2bin(a),
+
+    HugeBin = rand:bytes(1_000_000),
+    ?assertEqual(HugeBin, list2bin(bin2list(HugeBin))),
+
+    ok.
+
+bin2list(A0) ->
+    A = id(A0),
+
+    Res = try
+              binary_to_list(A)
+          catch
+              _:_ -> error
+          end,
+    Res = try
+              binary_to_list(A, 1, byte_size(A))
+          catch
+              _:_ -> error
+          end,
+    Res = try
+              _ = binary_to_list(A),
+              binary_to_list(A)
+          catch
+              _:_ -> error
+          end,
+    Res.
+
+list2bin(A) ->
+    try
+        list_to_binary(A)
+    catch
+        _:_ -> error
+    end.
 
 %%%
 %%% Common utilities.

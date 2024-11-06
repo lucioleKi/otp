@@ -30,11 +30,31 @@ extern "C"
 #include "erl_msacc.h"
 }
 
-void BeamModuleAssembler::ubif_comment(const ArgWord &Bif) {
+void BeamModuleAssembler::ubif_comment(const ArgWord &Bif,
+                                       const ArgExport &Exp) {
     if (logger.file()) {
-        ErtsCodeMFA *mfa = ubif2mfa((void *)Bif.get());
-        if (mfa) {
-            comment("UBIF: %T/%d", mfa->function, mfa->arity);
+        BeamFile_ImportEntry *import;
+        const Export *exp;
+        bool is_pure;
+
+        import = &beam->imports.entries[Exp.val];
+        exp = erts_active_export_entry(import->module,
+                                       import->function,
+                                       import->arity);
+
+        is_pure = exp->bif_number != -1 &&
+                  bif_table[exp->bif_number].kind == BIF_KIND_PURE;
+
+        if (is_pure) {
+            comment("fake UBIF: %T:%T/%d",
+                    import->module,
+                    import->function,
+                    import->arity);
+        } else {
+            ErtsCodeMFA *mfa = ubif2mfa((void *)Bif.get());
+            if (mfa) {
+                comment("UBIF: %T/%d", mfa->function, mfa->arity);
+            }
         }
     }
 }
@@ -108,12 +128,13 @@ void BeamGlobalAssembler::emit_i_bif_body_shared() {
 void BeamModuleAssembler::emit_i_bif1(const ArgSource &Src1,
                                       const ArgLabel &Fail,
                                       const ArgWord &Bif,
+                                      const ArgExport &Exp,
                                       const ArgRegister &Dst) {
     auto src1 = load_source(Src1);
 
     a.str(src1.reg, getXRef(0));
 
-    ubif_comment(Bif);
+    ubif_comment(Bif, Exp);
     emit_i_bif(Fail, Bif, Dst);
 }
 
@@ -121,12 +142,13 @@ void BeamModuleAssembler::emit_i_bif2(const ArgSource &Src1,
                                       const ArgSource &Src2,
                                       const ArgLabel &Fail,
                                       const ArgWord &Bif,
+                                      const ArgExport &Exp,
                                       const ArgRegister &Dst) {
     auto [src1, src2] = load_sources(Src1, TMP1, Src2, TMP2);
 
     a.stp(src1.reg, src2.reg, getXRef(0));
 
-    ubif_comment(Bif);
+    ubif_comment(Bif, Exp);
     emit_i_bif(Fail, Bif, Dst);
 }
 
@@ -135,6 +157,7 @@ void BeamModuleAssembler::emit_i_bif3(const ArgSource &Src1,
                                       const ArgSource &Src3,
                                       const ArgLabel &Fail,
                                       const ArgWord &Bif,
+                                      const ArgExport &Exp,
                                       const ArgRegister &Dst) {
     auto [src1, src2] = load_sources(Src1, TMP1, Src2, TMP2);
     auto src3 = load_source(Src3, TMP3);
@@ -142,7 +165,7 @@ void BeamModuleAssembler::emit_i_bif3(const ArgSource &Src1,
     a.stp(src1.reg, src2.reg, getXRef(0));
     a.str(src3.reg, getXRef(2));
 
-    ubif_comment(Bif);
+    ubif_comment(Bif, Exp);
     emit_i_bif(Fail, Bif, Dst);
 }
 
@@ -168,12 +191,13 @@ void BeamModuleAssembler::emit_i_bif(const ArgLabel &Fail,
 
 void BeamModuleAssembler::emit_nofail_bif1(const ArgSource &Src1,
                                            const ArgWord &Bif,
+                                           const ArgExport &Exp,
                                            const ArgRegister &Dst) {
     auto src1 = load_source(Src1);
 
     a.str(src1.reg, getXRef(0));
 
-    ubif_comment(Bif);
+    ubif_comment(Bif, Exp);
     mov_arg(ARG4, Bif);
     fragment_call(ga->get_i_bif_guard_shared());
     mov_arg(Dst, ARG1);
@@ -182,12 +206,13 @@ void BeamModuleAssembler::emit_nofail_bif1(const ArgSource &Src1,
 void BeamModuleAssembler::emit_nofail_bif2(const ArgSource &Src1,
                                            const ArgSource &Src2,
                                            const ArgWord &Bif,
+                                           const ArgExport &Exp,
                                            const ArgRegister &Dst) {
     auto [src1, src2] = load_sources(Src1, TMP1, Src2, TMP2);
 
     a.stp(src1.reg, src2.reg, getXRef(0));
 
-    ubif_comment(Bif);
+    ubif_comment(Bif, Exp);
     mov_arg(ARG4, Bif);
     fragment_call(ga->get_i_bif_guard_shared());
     mov_arg(Dst, ARG1);
@@ -364,13 +389,8 @@ static Eterm debug_call_light_bif(Process *c_p,
 
 /* It is important that the below code is as optimized as possible.
  * When doing any changes, make sure to look at the estone bif_dispatch
- * benchmark to make sure you don't introduce any regressions.
- *
- * ARG3 = entry
- * ARG4 = export entry
- * ARG8 = BIF pointer
- */
-void BeamGlobalAssembler::emit_call_light_bif_shared() {
+ * benchmark to make sure you don't introduce any regressions. */
+void BeamGlobalAssembler::emit_call_bif_common(bool return_error) {
     arm::Mem entry_mem = TMP_MEM1q, export_mem = TMP_MEM2q,
              mbuf_mem = TMP_MEM3q;
 
@@ -528,11 +548,16 @@ void BeamGlobalAssembler::emit_call_light_bif_shared() {
 
             a.bind(error);
             {
-                /* raise_exception_shared expects current PC in ARG2 and MFA in
-                 * ARG4. */
-                a.ldp(ARG2, ARG4, entry_mem);
-                add(ARG4, ARG4, offsetof(Export, info.mfa));
-                a.b(labels[raise_exception_shared]);
+                if (return_error) {
+                    a.mov(XREG0, THE_NON_VALUE);
+                    a.ret(a64::x30);
+                } else {
+                    /* raise_exception_shared expects current PC in
+                     * ARG2 and MFA in ARG4. */
+                    a.ldp(ARG2, ARG4, entry_mem);
+                    add(ARG4, ARG4, offsetof(Export, info.mfa));
+                    a.b(labels[raise_exception_shared]);
+                }
             }
         }
 
@@ -577,6 +602,30 @@ void BeamGlobalAssembler::emit_call_light_bif_shared() {
     }
 }
 
+/*
+ * ARG3 = entry
+ * ARG4 = export entry
+ * ARG8 = BIF pointer
+ *
+ * If successful, the result is returned in XREG0.
+ * In case of error, an exception is raised.
+ */
+void BeamGlobalAssembler::emit_call_light_bif_shared() {
+    emit_call_bif_common(false);
+}
+
+/*
+ * ARG3 = entry
+ * ARG4 = export entry
+ * ARG8 = BIF pointer
+ *
+ * If successful, the result is returned in XREG0.
+ * In case of error, XREG0 is THE_NON_VALUE on return.
+ */
+void BeamGlobalAssembler::emit_call_pseudo_guard_bif_shared() {
+    emit_call_bif_common(true);
+}
+
 void BeamModuleAssembler::emit_call_light_bif(const ArgWord &Bif,
                                               const ArgExport &Exp) {
     Label entry = a.newLabel();
@@ -592,6 +641,26 @@ void BeamModuleAssembler::emit_call_light_bif(const ArgWord &Bif,
         comment("BIF: %T:%T/%d", e->module, e->function, e->arity);
     }
     fragment_call(ga->get_call_light_bif_shared());
+}
+
+void BeamModuleAssembler::emit_i_call_pseudo_guard_bif(const ArgWord &Live,
+                                                       const ArgWord &Bif,
+                                                       const ArgExport &Exp,
+                                                       const ArgLabel &Fail) {
+    Label entry = a.newLabel();
+    BeamFile_ImportEntry *e = &beam->imports.entries[Exp.get()];
+
+    a.bind(entry);
+
+    mov_arg(ARG4, Exp);
+    mov_arg(ARG8, Bif);
+    a.adr(ARG3, entry);
+
+    if (logger.file()) {
+        comment("BIF: %T:%T/%d", e->module, e->function, e->arity);
+    }
+    fragment_call(ga->get_call_pseudo_guard_bif_shared());
+    emit_branch_if_not_value(XREG0, resolve_beam_label(Fail, dispUnknown));
 }
 
 void BeamModuleAssembler::emit_send() {

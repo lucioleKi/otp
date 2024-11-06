@@ -935,6 +935,8 @@ instr_labels({bif,_Name,Lbl,_As,_R}) ->
     do_instr_labels(Lbl);
 instr_labels({gc_bif,_Name,Lbl,_Live,_As,_R}) ->
     do_instr_labels(Lbl);
+instr_labels({call_pseudo_guard_bif,_Arity,_Lbl,Fail}) ->
+    do_instr_labels(Fail);
 instr_labels({bs_create_bin,Lbl,_,_,_,_,_}) ->
     do_instr_labels(Lbl);
 instr_labels({put_map,Lbl,_Op,_Src,_Dst,_Live,_List}) ->

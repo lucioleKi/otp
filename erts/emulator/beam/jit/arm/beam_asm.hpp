@@ -1243,6 +1243,12 @@ protected:
                     const ArgWord &Bif,
                     const ArgRegister &Dst);
 
+    void emit_i_bif_pure(const ArgWord &Bif,
+                         const ArgExport &Exp,
+                         const ArgWord &Live,
+                         const ArgLabel &Fail,
+                         const ArgRegister &Dst);
+
     void emit_error(int code);
     void emit_error(int reason, const ArgSource &Src);
 
@@ -1299,7 +1305,7 @@ protected:
 
     void emit_validate_unicode(Label next, Label fail, a64::Gp value);
 
-    void ubif_comment(const ArgWord &Bif);
+    void ubif_comment(const ArgWord &Bif, const ArgExport &Exp);
 
     void emit_cmp_immed_to_bool(arm::CondCode cc,
                                 const ArgSource &LHS,

@@ -174,8 +174,8 @@ $(APPUP_TARGET): $(APPUP_SRC) ../vsn.mk
 
 $(EGEN)/beam_opcodes.erl $(EGEN)/beam_opcodes.hrl: $(EGEN)/OPCODES-GENERATED
 
-$(EGEN)/OPCODES-GENERATED: genop.tab
-	$(gen_verbose)$(PERL) $(ERL_TOP)/erts/emulator/utils/beam_makeops -compiler -outdir $(EGEN) $< && echo $? >$(EGEN)/OPCODES-GENERATED
+$(EGEN)/OPCODES-GENERATED: genop.tab $(ERL_TOP)/erts/emulator/beam/bif.tab pbif.tab
+	$(gen_verbose)$(PERL) $(ERL_TOP)/erts/emulator/utils/beam_makeops -compiler -outdir $(EGEN) $^ && echo $^ >$(EGEN)/OPCODES-GENERATED
 
 $(EBIN)/beam_asm.beam: $(ESRC)/beam_asm.erl $(EGEN)/beam_opcodes.hrl
 	$(V_ERLC) $(ERL_COMPILE_FLAGS) -DCOMPILER_VSN='"$(VSN)"' -o$(EBIN) $<

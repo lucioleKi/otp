@@ -385,12 +385,8 @@ static Eterm debug_call_light_bif(Process *c_p,
 /* It is important that the below code is as optimized as possible.
  * When doing any changes, make sure to look at the estone bif_dispatch
  * benchmark to make sure you don't introduce any regressions.
- *
- * ARG3 = entry
- * ARG4 = export entry
- * RET  = BIF pointer
  */
-void BeamGlobalAssembler::emit_call_light_bif_shared() {
+void BeamGlobalAssembler::emit_call_bif_common(bool return_error) {
     x86::Mem entry_mem = TMP_MEM1q, export_mem = TMP_MEM2q,
              mbuf_mem = TMP_MEM3q;
 
@@ -524,6 +520,9 @@ void BeamGlobalAssembler::emit_call_light_bif_shared() {
             a.mov(getXRef(0), RET);
 
             emit_leave_frame();
+            if (return_error) {
+                a.and_(RET, RET); /* Clear Z flag */
+            }
             a.ret();
 
             a.bind(trap);
@@ -546,27 +545,33 @@ void BeamGlobalAssembler::emit_call_light_bif_shared() {
 
             a.bind(error);
             {
-                a.mov(ARG2, entry_mem);
-                a.mov(ARG4, export_mem);
-                a.add(ARG4, imm(offsetof(Export, info.mfa)));
+                if (return_error) {
+                    emit_leave_frame();
+                    a.xor_(RETd, RETd); /* Set Z flag */
+                    a.ret();
+                } else {
+                    a.mov(ARG2, entry_mem);
+                    a.mov(ARG4, export_mem);
+                    a.add(ARG4, imm(offsetof(Export, info.mfa)));
 
 #if !defined(NATIVE_ERLANG_STACK)
-                /* Discard the continuation pointer as it will never be
-                 * used. */
-                emit_unwind_frame();
+                    /* Discard the continuation pointer as it will never be
+                     * used. */
+                    emit_unwind_frame();
 #endif
 
-                /* Overwrite the return address with the entry address to
-                 * ensure that only the entry address ends up in the stack
-                 * trace. */
-                if (erts_frame_layout == ERTS_FRAME_LAYOUT_RA) {
-                    a.mov(x86::qword_ptr(E), ARG2);
-                } else {
-                    ASSERT(erts_frame_layout == ERTS_FRAME_LAYOUT_FP_RA);
-                    a.mov(x86::qword_ptr(E, 8), ARG2);
-                }
+                    /* Overwrite the return address with the entry address to
+                     * ensure that only the entry address ends up in the stack
+                     * trace. */
+                    if (erts_frame_layout == ERTS_FRAME_LAYOUT_RA) {
+                        a.mov(x86::qword_ptr(E), ARG2);
+                    } else {
+                        ASSERT(erts_frame_layout == ERTS_FRAME_LAYOUT_FP_RA);
+                        a.mov(x86::qword_ptr(E, 8), ARG2);
+                    }
 
-                a.jmp(labels[raise_exception_shared]);
+                    a.jmp(labels[raise_exception_shared]);
+                }
             }
         }
 
@@ -624,6 +629,30 @@ void BeamGlobalAssembler::emit_call_light_bif_shared() {
     }
 }
 
+/*
+ * ARG3 = entry
+ * ARG4 = export entry
+ * RET  = BIF pointer
+ *
+ * If successful, the result is returned in RET.
+ * In case of error, an exception is raised.
+ */
+void BeamGlobalAssembler::emit_call_light_bif_shared() {
+    emit_call_bif_common(false);
+}
+
+/*
+ * ARG3 = entry
+ * ARG4 = export entry
+ * RET = BIF pointer
+ *
+ * If successful, the result is returned in RET.
+ * In case of error, Z-flag is set on return.
+ */
+void BeamGlobalAssembler::emit_call_pseudo_guard_bif_shared() {
+    emit_call_bif_common(true);
+}
+
 void BeamModuleAssembler::emit_call_light_bif(const ArgWord &Bif,
                                               const ArgExport &Exp) {
     Label entry = a.newLabel();
@@ -640,6 +669,28 @@ void BeamModuleAssembler::emit_call_light_bif(const ArgWord &Bif,
         comment("BIF: %T:%T/%d", e->module, e->function, e->arity);
     }
     fragment_call(ga->get_call_light_bif_shared());
+}
+
+void BeamModuleAssembler::emit_i_call_pseudo_guard_bif(const ArgWord &Live,
+                                                       const ArgWord &Bif,
+                                                       const ArgExport &Exp,
+                                                       const ArgLabel &Fail) {
+    Label entry = a.newLabel();
+
+    align_erlang_cp();
+    a.bind(entry);
+
+    mov_arg(ARG4, Exp);
+    a.mov(RET, imm(Bif.get()));
+    a.lea(ARG3, x86::qword_ptr(entry));
+
+    if (logger.file()) {
+        BeamFile_ImportEntry *e = &beam->imports.entries[Exp.get()];
+        comment("BIF: %T:%T/%d", e->module, e->function, e->arity);
+    }
+
+    fragment_call(ga->get_call_pseudo_guard_bif_shared());
+    a.je(resolve_beam_label(Fail));
 }
 
 void BeamModuleAssembler::emit_send() {

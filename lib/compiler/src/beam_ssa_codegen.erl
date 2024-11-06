@@ -1224,9 +1224,18 @@ cg_block([#cg_set{op=catch_end,dst=Dst0,args=Args0}|Is], Context, St0) ->
     [Dst,Reg,{x,0}] = beam_args([Dst0|Args0], St0),
     {Is0,St} = cg_block(Is, Context, St0),
     {[{catch_end,Reg}|copy({x,0}, Dst)++Is0],St};
+cg_block([#cg_set{anno=#{pseudo_bif := true}=Anno,op=call,dst=Dst0,args=[Func0|Args0]},
+          #cg_set{op=succeeded,dst=Bool}], {Bool,Fail}, St) ->
+    [Dst|Args] = beam_args([Dst0|Args0], St),
+    #b_remote{mod=Mod0,name=Name0,arity=Arity} = Func0,
+    {{atom,Mod},{atom,Name}} = {beam_arg(Mod0, St),beam_arg(Name0, St)},
+    Func = {extfunc,Mod,Name,Arity},
+    Line = call_line(body, Func, Anno),
+    Call = [{call_pseudo_guard_bif,Arity,Func,Fail}|copy({x,0}, Dst)],
+    Is = setup_args(Args, Anno, none, St) ++ Line ++ Call,
+    {Is,St};
 cg_block([#cg_set{op=call}=I,
           #cg_set{op=succeeded,dst=Bool}], {Bool,_Fail}, St) ->
-    %% A call in try/catch block.
     cg_block([I], none, St);
 cg_block([#cg_set{op=match_fail}=I,
           #cg_set{op=succeeded,dst=Bool}], {Bool,_Fail}, St) ->

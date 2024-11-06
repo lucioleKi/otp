@@ -43,6 +43,7 @@ my @beam_global_funcs = qw(
     call_bif_shared
     call_light_bif_shared
     call_nif_yield_helper
+    call_pseudo_guard_bif_shared
     catch_end_shared
     call_nif_early
     call_nif_shared
@@ -190,6 +191,8 @@ $decl_emit_funcs
     void emit_bitwise_fallback_body(T(*func_ptr), const ErtsCodeMFA *mfa);
 
     void emit_i_length_common(Label fail, int state_size);
+
+    void emit_call_bif_common(bool return_error);
 
     void emit_raise_badarg(const ErtsCodeMFA *mfa);
 

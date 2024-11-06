@@ -731,6 +731,8 @@ vi({bif,Op,{f,Fail},Ss0,Dst0}, Vst0) ->
         false ->
             validate_bif(bif, Op, Fail, Ss, Dst, Vst0, Vst0)
     end;
+vi({call_pseudo_guard_bif,Live,Func,{f,Fail}}, Vst) ->
+     validate_pseudo_guard_bif(Func, Live, Fail, Vst);
 vi({gc_bif,Op,{f,Fail},Live,Ss0,Dst0}, Vst0) ->
     Ss = [unpack_typed_arg(Arg, Vst0) || Arg <- Ss0],
     Dst = unpack_typed_arg(Dst0, Vst0),
@@ -1251,6 +1253,29 @@ validate_body_call(Func, Live,
     end;
 validate_body_call(_, _, #vst{current=#st{numy=NumY}}) ->
     error({allocated, NumY}).
+
+%% Call a pseudo guard bif in a removed try/catch.
+%% If the call fails, no exception should be produced.
+%% A fail label must exist for a call that can fail.
+validate_pseudo_guard_bif(Func, Live, Fail, Vst) ->
+    verify_y_init(Vst),
+    verify_live(Live, Vst),
+    verify_call_args(Func, Live, Vst),
+
+    SuccFun = fun(SuccVst0) ->
+                      {RetType, _, _} = call_types(Func, Live, SuccVst0),
+                      true = RetType =/= none,  %Assertion.
+                      SuccVst = schedule_out(0, SuccVst0),
+                      create_term(RetType, call, [], {x,0}, SuccVst)
+              end,
+
+    case will_call_succeed(Func, Live, Vst) of
+        yes ->
+            SuccFun(Vst);
+        _ ->
+            assert_no_exception(Fail),
+            branch(Fail, Vst, SuccFun)
+    end.
 
 init_try_catch_branch(Kind, Dst, Fail, Vst0) ->
     assert_no_exception(Fail),

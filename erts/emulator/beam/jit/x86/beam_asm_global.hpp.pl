@@ -36,6 +36,7 @@ my @beam_global_funcs = qw(
     bs_init_bits_shared
     call_bif_shared
     call_light_bif_shared
+    call_pseudo_guard_bif_shared
     call_nif_early
     call_nif_shared
     call_nif_yield_helper
@@ -190,6 +191,8 @@ $decl_emit_funcs
     void emit_bitwise_fallback_guard(T(*func_ptr));
 
     x86::Mem emit_i_length_common(Label fail, int state_size);
+
+    void emit_call_bif_common(bool return_error);
 
     void emit_internal_hash_helper();
     void emit_flatmap_get_element();
