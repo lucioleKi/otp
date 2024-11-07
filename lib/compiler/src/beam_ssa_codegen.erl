@@ -1083,18 +1083,23 @@ cg_block([#cg_set{anno=Anno,op={bif,Name},dst=Dst0,args=Args0}=I,
           #cg_set{op=succeeded,dst=Bool}], {Bool,Fail0}, St) ->
     Args = typed_args(Args0, Anno, St),
     Dst = beam_arg(Dst0, St),
+    io:format("Dst~p~n", [Dst]),
+    io:format("I~p~n", [I]),
     Line0 = call_line(body, {extfunc,erlang,Name,length(Args)}, Anno),
     Fail = bif_fail(Fail0),
     Line = case Fail of
                {f,0} -> Line0;
                {f,_} -> []
            end,
-    case is_gc_bif(Name, Args) of
-        true ->
+    case {is_gc_bif(Name, Args), Anno} of
+        {true, #{pseudo_guard:={_,_,_,Live}=MFA}} ->
+            Kill = kill_yregs(Anno, St),
+            {Kill++[{call_pseudo_guard_bif,Live,MFA,Fail}],St};
+        {true, _} ->
             Live = get_live(I),
             Kill = kill_yregs(Anno, St),
             {Kill++Line++[{gc_bif,Name,Fail,Live,Args,Dst}],St};
-        false ->
+        {false, _} ->
             {Line++[{bif,Name,Fail,Args,Dst}],St}
     end;
 cg_block([#cg_set{op={bif,tuple_size},dst=Arity0,args=[Tuple0]},

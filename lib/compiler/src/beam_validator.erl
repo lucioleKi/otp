@@ -731,6 +731,8 @@ vi({bif,Op,{f,Fail},Ss0,Dst0}, Vst0) ->
         false ->
             validate_bif(bif, Op, Fail, Ss, Dst, Vst0, Vst0)
     end;
+vi({call_pseudo_guard_bif,Live,Func,{f,_Fail}}, Vst) ->
+     validate_tail_call(none,Func, Live, Vst);
 vi({gc_bif,Op,{f,Fail},Live,Ss0,Dst0}, Vst0) ->
     Ss = [unpack_typed_arg(Arg, Vst0) || Arg <- Ss0],
     Dst = unpack_typed_arg(Dst0, Vst0),
@@ -1091,7 +1093,8 @@ vi({bs_create_bin,{f,Fail},Heap,Live,Unit,Dst,{list,List0}}, Vst0) ->
                                SuccVst)
            end);
 
-vi(_, _) ->
+vi(I, _) ->
+    io:format("I~p~n", [I]),
     error(unknown_instruction).
 
 infer_relop_types(Op, Args, Types, Vst) ->

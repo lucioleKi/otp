@@ -1917,6 +1917,7 @@ reduce_try_is([#b_set{anno=Anno,op=call,args=[#b_remote{mod=#b_literal{val=M},
             reduce_try_is(Is, [I2|Acc]);
         false -> unsafe
     end;
+
 reduce_try_is([#b_set{op=Op}=I|Is], Acc) ->
     IsSafe = case Op of
                  phi -> true;
