@@ -90,10 +90,6 @@ i_bif.call(Fail, Bif, Dst) {
     $FAIL($Fail);
 }
 
-i_bif1_pure(Src, Fail, Bif, Dst) {
-    abort();
-}
-
 //
 // Guard BIF in body. It can fail like any BIF. No trace support.
 //
@@ -129,6 +125,10 @@ i_bif_body.call(Bif, Dst) {
     SWAPOUT;
     I = handle_error(c_p, I, reg, ubif2mfa((void *) bf));
     goto post_error_handling;
+}
+
+
+i_call_pseudo_guard_bif(Live, Bif, Exp, Fail) {
 }
 
 //
