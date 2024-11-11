@@ -1340,6 +1340,12 @@ unsupported_guard_bif/3
 unsupported_guard_bif _A _B _C | never() => _
 
 #
+# Pseudo-guard BIFs
+#
+
+call_pseudo_guard_bif _Arity _Func _Fail => _
+
+#
 # R13B03
 #
 on_load
