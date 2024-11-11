@@ -127,8 +127,100 @@ i_bif_body.call(Bif, Dst) {
     goto post_error_handling;
 }
 
-
 i_call_pseudo_guard_bif(Live, Bif, Exp, Fail) {
+    Export *export;
+    ErtsBifFunc bf;
+
+    Eterm result;
+    ErlHeapFragment *live_hf_end;
+
+    bf = (ErtsBifFunc) $Bif;
+    export = (Export*) $Exp;
+
+    if (!((FCALLS - 1) > 0 || (FCALLS-1) > neg_o_reds)) {
+        /*
+         * If we have run out of reductions, do a context
+         * switch before calling the BIF.
+         */
+        c_p->arity = GET_EXPORT_ARITY(export);
+        c_p->current = &export->info.mfa;
+        goto context_switch3;
+    }
+
+    if (ERTS_UNLIKELY(export->is_bif_traced)) {
+        $SAVE_CONTINUATION_POINTER($NEXT_INSTRUCTION);
+        $DISPATCH_EXPORT(export);
+    }
+
+    ERTS_MSACC_SET_BIF_STATE_CACHED_X(GET_EXPORT_MODULE(export), bf);
+
+    PRE_BIF_SWAPOUT(c_p);
+    ERTS_DBG_CHK_REDS(c_p, FCALLS);
+    c_p->fcalls = FCALLS - 1;
+    if (FCALLS <= 0) {
+        save_calls(c_p, export);
+    }
+    ASSERT(!ERTS_PROC_IS_EXITING(c_p));
+    ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
+    live_hf_end = c_p->mbuf;
+    ERTS_CHK_MBUF_SZ(c_p);
+
+    ERTS_ASSERT_TRACER_REFS(&c_p->common);
+
+    result = (*bf)(c_p, reg, I);
+
+    ERTS_ASSERT_TRACER_REFS(&c_p->common);
+
+    /* Only heavy BIFs may GC. */
+    ASSERT(E == c_p->stop);
+
+    ERTS_CHK_MBUF_SZ(c_p);
+    ASSERT(!ERTS_PROC_IS_EXITING(c_p) || is_non_value(result));
+    ERTS_VERIFY_UNUSED_TEMP_ALLOC(c_p);
+    ERTS_HOLE_CHECK(c_p);
+    ERTS_REQ_PROC_MAIN_LOCK(c_p);
+    if (ERTS_IS_GC_AFTER_BIF_DESIRED(c_p)) {
+        Uint arity = GET_EXPORT_ARITY(export);
+        result = erts_gc_after_bif_call_lhf(c_p, live_hf_end, result,
+                                            reg, arity);
+        E = c_p->stop;
+    }
+    HTOP = HEAP_TOP(c_p);
+    FCALLS = c_p->fcalls;
+    PROCESS_MAIN_CHK_LOCKS(c_p);
+    ERTS_DBG_CHK_REDS(c_p, FCALLS);
+
+    /*
+     * We have to update the cache if we are enabled in order
+     * to make sure no bookkeeping is done after we disabled
+     * msacc. We don't always do this as it is quite expensive.
+     */
+    if (ERTS_MSACC_IS_ENABLED_CACHED_X()) {
+        ERTS_MSACC_UPDATE_CACHE_X();
+    }
+    ERTS_MSACC_SET_STATE_CACHED_M_X(ERTS_MSACC_STATE_EMULATOR);
+    if (ERTS_LIKELY(is_value(result))) {
+        x(0) = result;
+        CHECK_TERM(x(0));
+        $NEXT0();
+    } else if (c_p->freason == TRAP) {
+        /*
+         * Set the continuation pointer to return to next
+         * instruction after the trap (either by a return from
+         * erlang code or by nif_bif.epilogue() when the BIF
+         * is done).
+         */
+        $SAVE_CONTINUATION_POINTER($NEXT_INSTRUCTION);
+        SET_I(c_p->i);
+        $DISPATCH();
+    }
+
+    /*
+     * Error handling.  SWAPOUT is not needed because it was done above.
+     */
+    ASSERT(c_p->stop == E);
+    $FAIL($Fail);
+    //| -no_next
 }
 
 //
