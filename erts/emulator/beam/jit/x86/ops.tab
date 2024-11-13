@@ -1271,17 +1271,6 @@ unsupported_guard_bif/3
 unsupported_guard_bif _A _B _C | never() => _
 
 #
-# Pseudo-guard BIFs
-#
-
-call_pseudo_guard_bif Live Func Fail | deallocate N =>
-    i_call_pseudo_guard_bif Live Func Func Fail | deallocate N
-call_pseudo_guard_bif Live Func Fail =>
-    allocate u Live | i_call_pseudo_guard_bif Live Func Func Fail | deallocate u
-
-i_call_pseudo_guard_bif t b e f
-
-#
 # R13B03
 #
 on_load
@@ -1310,3 +1299,9 @@ update_record a==am_inplace Size Src=d Dst N Updates=* =>
     update_record_in_place Size Src Dst N Updates
 update_record a I s d I *
 update_record_in_place I s d I *
+
+#
+# OTP 28
+#
+
+call_pseudo_guard_bif _Arity _Func _Fail => _
