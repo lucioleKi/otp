@@ -1194,19 +1194,6 @@ validate_var_info([_ | Info], Reg, Vst) ->
 validate_var_info([], _Reg, Vst) ->
     Vst.
 
-validate_pseudo_guard_bif(Func, Live, Fail, Vst) ->
-    verify_y_init(Vst),
-    verify_live(Live, Vst),
-    verify_call_args(Func, Live, Vst),
-
-    case will_call_succeed(Func, Live, Vst) of
-        yes ->
-            Vst;
-        _->
-            assert_no_exception(Fail),
-            branch(Fail, Vst)
-    end.
-
 %% Tail call.
 %%  The stackframe must have a known size and be initialized.
 %%  Does not return to the instruction following the call.
@@ -1266,6 +1253,27 @@ validate_body_call(Func, Live,
     end;
 validate_body_call(_, _, #vst{current=#st{numy=NumY}}) ->
     error({allocated, NumY}).
+
+%% FIXME: comment
+validate_pseudo_guard_bif(Func, Live, Fail, Vst) ->
+    verify_y_init(Vst),
+    verify_live(Live, Vst),
+    verify_call_args(Func, Live, Vst),
+
+    SuccFun = fun(SuccVst0) ->
+                      {RetType, _, _} = call_types(Func, Live, SuccVst0),
+                      true = RetType =/= none,  %Assertion.
+                      SuccVst = schedule_out(0, SuccVst0),
+                      create_term(RetType, call, [], {x,0}, SuccVst)
+              end,
+
+    case will_call_succeed(Func, Live, Vst) of
+        yes ->
+            SuccFun(Vst);
+        _ ->
+            assert_no_exception(Fail),
+            branch(Fail, Vst, SuccFun)
+    end.
 
 init_try_catch_branch(Kind, Dst, Fail, Vst0) ->
     assert_no_exception(Fail),
