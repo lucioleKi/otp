@@ -491,8 +491,6 @@ aa_is([_I=#b_set{dst=Dst,op=Op,args=Args,anno=Anno0}|Is], SS0,
             %% Instructions changing the alias status.
             {bif,Bif} ->
                 {aa_bif(Dst, Bif, Args, SS0, AAS0), AAS0};
-            {pseudo_bif,Bif} ->
-                {aa_bif(Dst, Bif, Args, SS0, AAS0), AAS0};
             bs_create_bin ->
                 case Args of
                     [#b_literal{val=Flag},_,Arg|_] when
