@@ -1089,15 +1089,12 @@ cg_block([#cg_set{anno=Anno,op={bif,Name},dst=Dst0,args=Args0}=I,
                {f,0} -> Line0;
                {f,_} -> []
            end,
-    case {is_gc_bif(Name, Args), Anno} of
-        {true, #{pseudo_guard:={_,_,_,Live}=MFA}} ->
-            Kill = kill_yregs(Anno, St),
-            {Kill++[{call_pseudo_guard_bif,Live,MFA,Fail}],St};
-        {true, _} ->
+    case is_gc_bif(Name, Args) of
+        true ->
             Live = get_live(I),
             Kill = kill_yregs(Anno, St),
             {Kill++Line++[{gc_bif,Name,Fail,Live,Args,Dst}],St};
-        {false, _} ->
+        false ->
             {Line++[{bif,Name,Fail,Args,Dst}],St}
     end;
 cg_block([#cg_set{op={bif,tuple_size},dst=Arity0,args=[Tuple0]},

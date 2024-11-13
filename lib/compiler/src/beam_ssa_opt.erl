@@ -1894,14 +1894,29 @@ reduce_try_is([#b_set{op={succeeded,body}}=I0|Is], Acc) ->
     I = I0#b_set{op={succeeded,guard}},
     reduce_try_is(Is, [I|Acc]);
 reduce_try_is([#b_set{anno=Anno,op=call,args=[#b_remote{mod=#b_literal{val=M},
-                        name=#b_literal{val=F},arity=A}|_Args]}=I0|Is], Acc) ->
-    case erl_bifs:is_pure(M, F, A) of
+                                              name=#b_literal{val=F},
+                                              arity=A}=R0|Args0]}=I0|Is],
+              Acc) ->
+    %% Rewrite binary_to_(existing_)atom/1 call to binary_to_(existing_)atom/2.
+    {I1, Args1} = if {M, F, A} =:= {erlang, binary_to_atom, 1} orelse
+                     {M, F, A} =:= {erlang, binary_to_existing_atom, 1} ->
+                          Args = Args0++[#b_literal{val=utf8}],
+                          {I0#b_set{args=[R0#b_remote{arity=2}|Args]},Args};
+                     true -> {I0, Args0}
+                  end,
+    %% Remove try-catch for bifs that can be written as guards.
+    case beam_ssa:can_be_guard_bif(M, F, A) of
         true ->
-            I = I0#b_set{anno=Anno#{pseudo_bif => true}},
+            I = I1#b_set{op={bif,F},args=Args1},
             reduce_try_is(Is, [I|Acc]);
-        false -> unsafe
+        false ->
+            case erl_bifs:is_pure(M, F, A) of
+                true ->
+                    I = I0#b_set{anno=Anno#{pseudo_bif => true}},
+                    reduce_try_is(Is, [I|Acc]);
+                false -> unsafe
+            end
     end;
-
 reduce_try_is([#b_set{op=Op}=I|Is], Acc) ->
     IsSafe = case Op of
                  phi -> true;

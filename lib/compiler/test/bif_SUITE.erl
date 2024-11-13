@@ -28,7 +28,8 @@
          cover_trim/1,
          head_tail/1,
          min_max/1,
-         non_throwing/1]).
+         non_throwing/1,
+         non_throwing_pure/1]).
 
 suite() ->
     [{ct_hooks,[ts_install_cth]}].
@@ -45,7 +46,8 @@ groups() ->
        cover_trim,
        head_tail,
        min_max,
-       non_throwing
+       non_throwing,
+       non_throwing_pure
       ]}].
 
 init_per_suite(Config) ->
@@ -254,6 +256,7 @@ min_max(_Config) ->
 
     105 = num_clamped_add(5),
     105.0 = num_clamped_add(5.0),
+
     110 = num_clamped_add(a),
     110 = num_clamped_add({a,b,c}),
     110 = num_clamped_add({a,b,c}),
@@ -311,6 +314,33 @@ non_throwing(_Config) ->
          catch _:_ -> []
          end,
     ok.
+
+non_throwing_pure(_Config) ->
+    [0] =  non_throwing_pure1(<<0>>),
+    error = non_throwing_pure1(a),
+    [0] = non_throwing_pure2(<<0>>),
+    error = non_throwing_pure2(a),
+    <<0>> = non_throwing_pure3(<<0>>),
+    error = non_throwing_pure3(a).
+
+non_throwing_pure1(A) ->
+    try binary_to_list(A)
+    catch _:_ -> error
+        end.
+
+non_throwing_pure2(A) ->
+    id(A),
+    try
+        _ = binary_to_list(A),
+        binary_to_list(A)
+    catch _:_ -> error
+        end.
+
+non_throwing_pure3(A) ->
+    try binary_to_list(A),
+        id(A)
+    catch _:_ -> error
+        end.
 
 %%%
 %%% Common utilities.
