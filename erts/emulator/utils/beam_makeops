@@ -282,6 +282,13 @@ foreach my $makes_no_sense ('f', 'j', 'o', 'q') {
 }
 
 #
+# Pseudo-guard BIFs.
+#
+my $in_pbifs_section = 0;
+my @pbifs;
+my %known_bifs;                 # Known BIFs based on bif.tab.
+
+#
 # Generate bits.
 #
 my %type_bit;
@@ -533,10 +540,47 @@ while (<>) {
     }
 
     #
+    # Handle %pbifs start and %pbifs end.
+    #
+    if (/^\%pbifs\s+(\S+)/) {
+        if ($1 eq 'start') {
+            $in_pbifs_section = 1;
+        } elsif ($1 eq 'end') {
+            $in_pbifs_section = 0;
+        } else {
+            error("pbifs: Illegal sub-directive '$1'");
+        }
+        next;
+    }
+
+    #
     # Handle unrecognized % directives.
     #
     if (/^\%(\S+)/) {
         error("Unrecognized directive '%$1'");
+    }
+
+    #
+    # Handle pseudo-guard BIFs.
+    #
+    if ($in_pbifs_section && m@^([\w\d_]+):([\w\d_]+)/(\d+)@) {
+        my $pbif = "$1:$2:$3";
+        unless (defined $known_bifs{$pbif}) {
+            error("BIF $1:$2/$3 is not defined as a 'bif' in bif.tab\n");
+        }
+        push @pbifs, "$1:$2:$3";
+        next;
+    } elsif (m@^bif\s+([\w\d_]+):([\w\d_]+)/(\d+)@) {
+        # This is a `bif` directive in bif.tab.
+        my $pbif = "$1:$2:$3";
+        $known_bifs{$pbif} = 1;
+        next;
+    } elsif (m@^[hu]bif\s+[\w\d_']+:@) {
+        # Ignore `hbif and `ubif` directives in bif.tab.
+        next;
+    } elsif (m@^bif\s+[\w\d_']+:@) {
+        # Ignore `bif` directives with quoted names in bif.tab.
+        next;
     }
 
     #
@@ -1220,7 +1264,7 @@ sub compiler_output {
     comment('erlang');
 
     print "-export([format_number/0]).\n";
-    print "-export([opcode/2,opname/1]).\n";
+    print "-export([opcode/2,opname/1,is_pbif/3]).\n";
     print "\n";
     print "-spec format_number() -> $BEAM_FORMAT_NUMBER.\n";
     print "format_number() -> $BEAM_FORMAT_NUMBER.\n\n";
@@ -1239,7 +1283,14 @@ sub compiler_output {
 	print "opname($i) -> {",
 	quote($gen_opname[$i]), ",$gen_arity[$i]};\n";
     }
-    print "opname(Number) -> erlang:error(badarg, [Number]).\n";
+    print "opname(Number) -> erlang:error(badarg, [Number]).\n\n";
+
+    print "-spec is_pbif(module(), atom(), non_neg_integer()) -> boolean().\n";
+    foreach my $pbif (@pbifs) {
+        my($mod,$name,$arity) = split(':', $pbif);
+        print "is_pbif($mod, $name, $arity) -> true;\n";
+    }
+    print "is_pbif(_, _, _) -> false.\n";
 
     #
     # Generate .hrl file.

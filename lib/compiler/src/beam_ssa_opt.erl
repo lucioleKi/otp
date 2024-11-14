@@ -1910,7 +1910,7 @@ reduce_try_is([#b_set{anno=Anno,op=call,args=[#b_remote{mod=#b_literal{val=M},
             I = I1#b_set{op={bif,F},args=Args1},
             reduce_try_is(Is, [I|Acc]);
         false ->
-            case erl_bifs:is_pure(M, F, A) of
+            case beam_opcodes:is_pbif(M, F, A) of
                 true ->
                     I = I0#b_set{anno=Anno#{pseudo_bif => true}},
                     reduce_try_is(Is, [I|Acc]);
