@@ -1853,8 +1853,8 @@ do_reduce_try([{L, Blk} | Bs]=Bs0, Ws0) ->
             end;
         true ->
             Ws1 = sets:del_element(L, Ws0),
-            #b_blk{is=Is0} = Blk,
-            case reduce_try_is(Is0, []) of
+            #b_blk{is=Is0,last=Last} = Blk,
+            case reduce_try_is(Is0, Last, []) of
                 {safe,Is} ->
                     %% This block does not execute any instructions
                     %% that would require a try. Analyze successors.
@@ -1877,25 +1877,26 @@ do_reduce_try([], Ws) ->
     true = sets:is_empty(Ws),                   %Assertion.
     [].
 
-reduce_try_is([#b_set{op=kill_try_tag}|Is], Acc) ->
+reduce_try_is([#b_set{op=kill_try_tag}|Is], _Last, Acc) ->
     %% Remove this kill_try_tag instruction. If there was a landingpad
     %% instruction in this block, it has already been removed. Preserve
     %% all other instructions in the block.
     {done,reverse(Acc, Is)};
-reduce_try_is([#b_set{op=extract}|_], _Acc) ->
+reduce_try_is([#b_set{op=extract}|_], _Last, _Acc) ->
     %% The error reason is accessed.
     unsafe;
-reduce_try_is([#b_set{op=landingpad}|Is], Acc) ->
-    reduce_try_is(Is, Acc);
-reduce_try_is([#b_set{op={succeeded,body}}=I0|Is], Acc) ->
+reduce_try_is([#b_set{op=landingpad}|Is], Last, Acc) ->
+    reduce_try_is(Is, Last, Acc);
+reduce_try_is([#b_set{op={succeeded,body}}=I0|Is], Last,  Acc) ->
     %% If we reached this point, it means that the previous instruction
     %% has no side effects. We must now convert the flavor of the
     %% succeeded to the `guard`, since the try/catch will be removed.
     I = I0#b_set{op={succeeded,guard}},
-    reduce_try_is(Is, [I|Acc]);
+    reduce_try_is(Is, Last, [I|Acc]);
 reduce_try_is([#b_set{anno=Anno,op=call,args=[#b_remote{mod=#b_literal{val=M},
                                               name=#b_literal{val=F},
                                               arity=A}=R0|Args0]}=I0|Is],
+              Last,
               Acc) ->
     %% Rewrite binary_to_(existing_)atom/1 call to binary_to_(existing_)atom/2.
     {I1, Args1} = if {M, F, A} =:= {erlang, binary_to_atom, 1} orelse
@@ -1908,25 +1909,30 @@ reduce_try_is([#b_set{anno=Anno,op=call,args=[#b_remote{mod=#b_literal{val=M},
     case beam_ssa:can_be_guard_bif(M, F, A) of
         true ->
             I = I1#b_set{op={bif,F},args=Args1},
-            reduce_try_is(Is, [I|Acc]);
+            reduce_try_is(Is, Last, [I|Acc]);
         false ->
-            case beam_opcodes:is_pbif(M, F, A) of
-                true ->
+            case {beam_opcodes:is_pbif(M, F, A),Last} of
+                {true,#b_br{bool=#b_literal{}}} ->
+                    %% This branch only goes in one
+                    %% direction. Optimization could be unsafe.
+                    unsafe;
+                {true,_} ->
                     I = I0#b_set{anno=Anno#{pseudo_bif => true}},
-                    reduce_try_is(Is, [I|Acc]);
-                false -> unsafe
+                    reduce_try_is(Is, Last, [I|Acc]);
+                {false,_} ->
+                    unsafe
             end
     end;
-reduce_try_is([#b_set{op=Op}=I|Is], Acc) ->
+reduce_try_is([#b_set{op=Op}=I|Is], Last, Acc) ->
     IsSafe = case Op of
                  phi -> true;
                  _ -> beam_ssa:no_side_effect(I)
              end,
     case IsSafe of
-        true -> reduce_try_is(Is, [I|Acc]);
+        true -> reduce_try_is(Is, Last, [I|Acc]);
         false -> unsafe
     end;
-reduce_try_is([], Acc) ->
+reduce_try_is([], _Last, Acc) ->
     {safe,reverse(Acc)}.
 
 %% Removes try/catch expressions whose expressions will never throw.
