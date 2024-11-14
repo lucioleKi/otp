@@ -316,12 +316,26 @@ non_throwing(_Config) ->
     ok.
 
 non_throwing_pure(_Config) ->
-    [0] =  non_throwing_pure1(<<0>>),
-    error = non_throwing_pure1(a),
-    [0] = non_throwing_pure2(<<0>>),
-    error = non_throwing_pure2(a),
-    <<0>> = non_throwing_pure3(<<0>>),
-    error = non_throwing_pure3(a).
+    [0] = non_throwing_pure1(id(<<0>>)),
+    error = non_throwing_pure1(id(a)),
+    [0] = non_throwing_pure2(id(<<0>>)),
+    error = non_throwing_pure2(id(a)),
+    <<0>> = non_throwing_pure3(id(<<0>>)),
+    error = non_throwing_pure3(id(a)),
+
+    try binary_to_list(a)
+    catch _:_ -> error
+    end,
+
+    AnAtom = id(abc),
+    if
+        is_atom(AnAtom) ->
+            try binary_to_list(AnAtom)
+            catch _:_ -> error
+            end
+    end,
+    
+    ok.
 
 non_throwing_pure1(A) ->
     try binary_to_list(A)
