@@ -43,10 +43,13 @@ void BeamModuleAssembler::ubif_comment(const ArgWord &Bif,
                                        import->arity);
 
         is_pure = exp->bif_number != -1 &&
-            bif_table[exp->bif_number].kind == BIF_KIND_PURE;
+                  bif_table[exp->bif_number].kind == BIF_KIND_PURE;
 
         if (is_pure) {
-            comment("fake UBIF: %T:%T/%d", import->module, import->function, import->arity);
+            comment("fake UBIF: %T:%T/%d",
+                    import->module,
+                    import->function,
+                    import->arity);
         } else {
             ErtsCodeMFA *mfa = ubif2mfa((void *)Bif.get());
             if (mfa) {

@@ -36,6 +36,7 @@ my @beam_global_funcs = qw(
     bs_init_bits_shared
     call_bif_shared
     call_light_bif_shared
+    call_pseudo_guard_bif_shared
     call_nif_early
     call_nif_shared
     call_nif_yield_helper
