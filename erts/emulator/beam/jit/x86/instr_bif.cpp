@@ -784,6 +784,7 @@ void BeamGlobalAssembler::emit_call_pseudo_guard_bif_shared() {
             a.mov(getXRef(0), RET);
 
             emit_leave_frame();
+            a.and_(x86::rax, x86::rax);
             a.ret();
 
             a.bind(trap);
@@ -806,27 +807,9 @@ void BeamGlobalAssembler::emit_call_pseudo_guard_bif_shared() {
 
             a.bind(error);
             {
-                a.mov(ARG2, entry_mem);
-                a.mov(ARG4, export_mem);
-                a.add(ARG4, imm(offsetof(Export, info.mfa)));
-
-#if !defined(NATIVE_ERLANG_STACK)
-                /* Discard the continuation pointer as it will never be
-                 * used. */
-                emit_unwind_frame();
-#endif
-
-                /* Overwrite the return address with the entry address to
-                 * ensure that only the entry address ends up in the stack
-                 * trace. */
-                if (erts_frame_layout == ERTS_FRAME_LAYOUT_RA) {
-                    a.mov(x86::qword_ptr(E), ARG2);
-                } else {
-                    ASSERT(erts_frame_layout == ERTS_FRAME_LAYOUT_FP_RA);
-                    a.mov(x86::qword_ptr(E, 8), ARG2);
-                }
-
-                a.jmp(labels[raise_exception_shared]);
+                emit_leave_frame();
+                a.xor_(x86::eax, x86::eax);
+                a.ret();
             }
         }
 
@@ -901,7 +884,9 @@ void BeamModuleAssembler::emit_i_call_pseudo_guard_bif(const ArgWord &Live,
         BeamFile_ImportEntry *e = &beam->imports.entries[Exp.get()];
         comment("BIF: %T:%T/%d", e->module, e->function, e->arity);
     }
+
     fragment_call(ga->get_call_pseudo_guard_bif_shared());
+    a.je(resolve_beam_label(Fail));
 }
 
 void BeamModuleAssembler::emit_send() {

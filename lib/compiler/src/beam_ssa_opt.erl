@@ -1929,12 +1929,6 @@ reduce_try_is([#b_set{op=Op}=I|Is], Acc) ->
 reduce_try_is([], Acc) ->
     {safe,reverse(Acc)}.
 
-% is_safe_as_guard_bif(erlang, binary_to_atom, 2) -> true;
-% is_safe_as_guard_bif(erlang, binary_to_existing_atom, 2) -> true;
-% is_safe_as_guard_bif(erlang, list_to_atom, 1) -> true;
-% is_safe_as_guard_bif(erlang, list_to_existing_atom, 1) -> true;
-% is_safe_as_guard_bif(_, _, _) -> false.
-
 %% Removes try/catch expressions whose expressions will never throw.
 %%
 %% We walk backwards through all blocks, maintaining a set of potentially
