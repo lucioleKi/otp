@@ -546,12 +546,16 @@ merge_tuple_update_1([], Tuple) ->
 %%% Splitting before call and make_fun instructions gives more opportunities
 %%% for sinking get_tuple_element instructions.
 %%%
+%%% Splitting before new_try_tag gives more opportunities for optimizing
+%%% try/catch.
+%%%
 
 ssa_opt_split_blocks({#opt_st{ssa=Blocks0,cnt=Count0}=St, FuncDb}) ->
     P = fun(#b_set{op={bif,element}}) -> true;
            (#b_set{op=call}) -> true;
            (#b_set{op=bs_init_writable}) -> true;
            (#b_set{op=make_fun}) -> true;
+           (#b_set{op=new_try_tag}) -> true;
            (_) -> false
         end,
     RPO = beam_ssa:rpo(Blocks0),
