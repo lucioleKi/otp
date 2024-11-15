@@ -784,7 +784,7 @@ void BeamGlobalAssembler::emit_call_pseudo_guard_bif_shared() {
             a.mov(getXRef(0), RET);
 
             emit_leave_frame();
-            a.and_(x86::rax, x86::rax);
+            a.and_(RET, RET);   /* Clear Z flag */
             a.ret();
 
             a.bind(trap);
@@ -808,7 +808,7 @@ void BeamGlobalAssembler::emit_call_pseudo_guard_bif_shared() {
             a.bind(error);
             {
                 emit_leave_frame();
-                a.xor_(x86::eax, x86::eax);
+                a.xor_(RETd, RETd); /* Set Z flag */
                 a.ret();
             }
         }
