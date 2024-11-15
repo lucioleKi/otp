@@ -389,13 +389,8 @@ static Eterm debug_call_light_bif(Process *c_p,
 
 /* It is important that the below code is as optimized as possible.
  * When doing any changes, make sure to look at the estone bif_dispatch
- * benchmark to make sure you don't introduce any regressions.
- *
- * ARG3 = entry
- * ARG4 = export entry
- * ARG8 = BIF pointer
- */
-void BeamGlobalAssembler::emit_call_light_bif_shared() {
+ * benchmark to make sure you don't introduce any regressions. */
+void BeamGlobalAssembler::emit_call_bif_common(bool return_error) {
     arm::Mem entry_mem = TMP_MEM1q, export_mem = TMP_MEM2q,
              mbuf_mem = TMP_MEM3q;
 
@@ -553,11 +548,16 @@ void BeamGlobalAssembler::emit_call_light_bif_shared() {
 
             a.bind(error);
             {
-                /* raise_exception_shared expects current PC in ARG2 and MFA in
-                 * ARG4. */
-                a.ldp(ARG2, ARG4, entry_mem);
-                add(ARG4, ARG4, offsetof(Export, info.mfa));
-                a.b(labels[raise_exception_shared]);
+                if (return_error) {
+                    a.mov(XREG0, THE_NON_VALUE);
+                    a.ret(a64::x30);
+                } else {
+                    /* raise_exception_shared expects current PC in
+                     * ARG2 and MFA in ARG4. */
+                    a.ldp(ARG2, ARG4, entry_mem);
+                    add(ARG4, ARG4, offsetof(Export, info.mfa));
+                    a.b(labels[raise_exception_shared]);
+                }
             }
         }
 
@@ -602,6 +602,30 @@ void BeamGlobalAssembler::emit_call_light_bif_shared() {
     }
 }
 
+/*
+ * ARG3 = entry
+ * ARG4 = export entry
+ * ARG8 = BIF pointer
+ *
+ * If successful, the result is returned in XREG0.
+ * In case of error, an exception is raised.
+ */
+void BeamGlobalAssembler::emit_call_light_bif_shared() {
+    emit_call_bif_common(false);
+}
+
+/*
+ * ARG3 = entry
+ * ARG4 = export entry
+ * ARG8 = BIF pointer
+ *
+ * If successful, the result is returned in XREG0.
+ * In case of error, XREG0 is THE_NON_VALUE on return.
+ */
+void BeamGlobalAssembler::emit_call_pseudo_guard_bif_shared() {
+    emit_call_bif_common(true);
+}
+
 void BeamModuleAssembler::emit_call_light_bif(const ArgWord &Bif,
                                               const ArgExport &Exp) {
     Label entry = a.newLabel();
@@ -619,6 +643,26 @@ void BeamModuleAssembler::emit_call_light_bif(const ArgWord &Bif,
     fragment_call(ga->get_call_light_bif_shared());
 }
 
+void BeamModuleAssembler::emit_i_call_pseudo_guard_bif(const ArgWord &Live,
+                                                     const ArgWord &Bif,
+                                                     const ArgExport &Exp,
+                                                     const ArgLabel &Fail) {
+    Label entry = a.newLabel();
+    BeamFile_ImportEntry *e = &beam->imports.entries[Exp.get()];
+
+    a.bind(entry);
+
+    mov_arg(ARG4, Exp);
+    mov_arg(ARG8, Bif);
+    a.adr(ARG3, entry);
+
+    if (logger.file()) {
+        comment("BIF: %T:%T/%d", e->module, e->function, e->arity);
+    }
+    fragment_call(ga->get_call_pseudo_guard_bif_shared());
+    emit_branch_if_not_value(XREG0, resolve_beam_label(Fail, dispUnknown));
+}
+
 void BeamModuleAssembler::emit_send() {
     Label entry = a.newLabel();
 
@@ -633,26 +677,6 @@ void BeamModuleAssembler::emit_send() {
 
     fragment_call(ga->get_call_light_bif_shared());
 }
-
-// void BeamModuleAssembler::emit_i_bif_pure(const ArgWord &Bif,
-//                                           const ArgExport &Exp,
-//                                           const ArgWord &Live,
-//                                           const ArgLabel &Fail,
-//                                           const ArgRegister &Dst) {
-// }
-
-// void BeamModuleAssembler::emit_i_bif1_pure(const ArgWord &Bif,
-//                                            const ArgExport &Exp,
-//                                            const ArgWord &Live,
-//                                            const ArgLabel &Fail,
-//                                            const ArgSource &Src1,
-//                                            const ArgRegister &Dst) {
-//     auto src1 = load_source(Src1);
-
-//     a.str(src1.reg, getXRef(0));
-
-//     emit_i_bif_pure(Fail, Exp, Bif, Live, Dst);
-// }
 
 void BeamModuleAssembler::emit_nif_start() {
     /* load time only instruction */

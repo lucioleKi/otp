@@ -1343,7 +1343,10 @@ unsupported_guard_bif _A _B _C | never() => _
 # Pseudo-guard BIFs
 #
 
-call_pseudo_guard_bif _Arity _Func _Fail => _
+call_pseudo_guard_bif Live Func Fail =>
+    i_call_pseudo_guard_bif Live Func Func Fail
+
+i_call_pseudo_guard_bif t b e f
 
 #
 # R13B03
