@@ -385,12 +385,8 @@ static Eterm debug_call_light_bif(Process *c_p,
 /* It is important that the below code is as optimized as possible.
  * When doing any changes, make sure to look at the estone bif_dispatch
  * benchmark to make sure you don't introduce any regressions.
- *
- * ARG3 = entry
- * ARG4 = export entry
- * RET  = BIF pointer
  */
-void BeamGlobalAssembler::emit_call_light_bif_shared() {
+void BeamGlobalAssembler::emit_call_bif_common(bool return_error) {
     x86::Mem entry_mem = TMP_MEM1q, export_mem = TMP_MEM2q,
              mbuf_mem = TMP_MEM3q;
 
@@ -524,6 +520,9 @@ void BeamGlobalAssembler::emit_call_light_bif_shared() {
             a.mov(getXRef(0), RET);
 
             emit_leave_frame();
+            if (return_error) {
+                a.and_(RET, RET); /* Clear Z flag */
+            }
             a.ret();
 
             a.bind(trap);
@@ -546,27 +545,33 @@ void BeamGlobalAssembler::emit_call_light_bif_shared() {
 
             a.bind(error);
             {
-                a.mov(ARG2, entry_mem);
-                a.mov(ARG4, export_mem);
-                a.add(ARG4, imm(offsetof(Export, info.mfa)));
+                if (return_error) {
+                    emit_leave_frame();
+                    a.xor_(RETd, RETd); /* Set Z flag */
+                    a.ret();
+                } else {
+                    a.mov(ARG2, entry_mem);
+                    a.mov(ARG4, export_mem);
+                    a.add(ARG4, imm(offsetof(Export, info.mfa)));
 
 #if !defined(NATIVE_ERLANG_STACK)
-                /* Discard the continuation pointer as it will never be
-                 * used. */
-                emit_unwind_frame();
+                    /* Discard the continuation pointer as it will never be
+                     * used. */
+                    emit_unwind_frame();
 #endif
 
-                /* Overwrite the return address with the entry address to
-                 * ensure that only the entry address ends up in the stack
-                 * trace. */
-                if (erts_frame_layout == ERTS_FRAME_LAYOUT_RA) {
-                    a.mov(x86::qword_ptr(E), ARG2);
-                } else {
-                    ASSERT(erts_frame_layout == ERTS_FRAME_LAYOUT_FP_RA);
-                    a.mov(x86::qword_ptr(E, 8), ARG2);
-                }
+                    /* Overwrite the return address with the entry address to
+                     * ensure that only the entry address ends up in the stack
+                     * trace. */
+                    if (erts_frame_layout == ERTS_FRAME_LAYOUT_RA) {
+                        a.mov(x86::qword_ptr(E), ARG2);
+                    } else {
+                        ASSERT(erts_frame_layout == ERTS_FRAME_LAYOUT_FP_RA);
+                        a.mov(x86::qword_ptr(E, 8), ARG2);
+                    }
 
-                a.jmp(labels[raise_exception_shared]);
+                    a.jmp(labels[raise_exception_shared]);
+                }
             }
         }
 
@@ -622,6 +627,30 @@ void BeamGlobalAssembler::emit_call_light_bif_shared() {
 
         a.jmp(labels[context_switch_simplified]);
     }
+}
+
+/*
+ * ARG3 = entry
+ * ARG4 = export entry
+ * RET  = BIF pointer
+ *
+ * If successful, the result is returned in XREG0.
+ * In case of error, an exception is raised.
+ */
+void BeamGlobalAssembler::emit_call_light_bif_shared() {
+    emit_call_bif_common(false);
+}
+
+/*
+ * ARG3 = entry
+ * ARG4 = export entry
+ * RET = BIF pointer
+ *
+ * If successful, the result is returned in XREG0.
+ * In case of error, XREG0 is THE_NON_VALUE on return.
+ */
+void BeamGlobalAssembler::emit_call_pseudo_guard_bif_shared() {
+    emit_call_bif_common(true);
 }
 
 void BeamModuleAssembler::emit_call_light_bif(const ArgWord &Bif,
@@ -642,235 +671,10 @@ void BeamModuleAssembler::emit_call_light_bif(const ArgWord &Bif,
     fragment_call(ga->get_call_light_bif_shared());
 }
 
-/* It is important that the below code is as optimized as possible.
- * When doing any changes, make sure to look at the estone bif_dispatch
- * benchmark to make sure you don't introduce any regressions.
- *
- * ARG3 = entry
- * ARG4 = export entry
- * RET  = BIF pointer
- */
-void BeamGlobalAssembler::emit_call_pseudo_guard_bif_shared() {
-    x86::Mem entry_mem = TMP_MEM1q, export_mem = TMP_MEM2q,
-             mbuf_mem = TMP_MEM3q;
-
-    Label trace = a.newLabel(), yield = a.newLabel();
-
-    emit_enter_frame();
-
-    /* Spill everything we may need on the error and GC paths. */
-    a.mov(ARG1, x86::qword_ptr(c_p, offsetof(Process, mbuf)));
-    a.mov(entry_mem, ARG3);
-    a.mov(export_mem, ARG4);
-    a.mov(mbuf_mem, ARG1);
-
-    /* Check if we should trace this bif call or handle save_calls. Both
-     * variants dispatch through the export entry. */
-    a.cmp(x86::dword_ptr(ARG4, offsetof(Export, is_bif_traced)), imm(0));
-    a.jne(trace);
-    a.cmp(active_code_ix, imm(ERTS_SAVE_CALLS_CODE_IX));
-    a.je(trace);
-
-    a.dec(FCALLS);
-    a.jle(yield);
-
-    {
-        Label check_bif_return = a.newLabel(), gc_after_bif_call = a.newLabel();
-
-        emit_enter_runtime<Update::eReductions | Update::eStack |
-                           Update::eHeap>();
-
-#ifdef ERTS_MSACC_EXTENDED_STATES
-        {
-            Label skip_msacc = a.newLabel();
-
-            a.cmp(erts_msacc_cache, imm(0));
-            a.short_().je(skip_msacc);
-
-            a.mov(TMP_MEM4q, ARG3);
-
-            a.mov(ARG1, erts_msacc_cache);
-            a.mov(ARG2,
-                  x86::qword_ptr(ARG4, offsetof(Export, info.mfa.module)));
-            a.mov(ARG3, RET);
-            runtime_call<3>(erts_msacc_set_bif_state);
-
-            a.mov(ARG3, TMP_MEM4q);
-            a.bind(skip_msacc);
-        }
-#endif
-
-        {
-            /* Call the BIF proper. ARG3 and RET have been set earlier. */
-            a.mov(ARG1, c_p);
-            load_x_reg_array(ARG2);
-
-#if defined(DEBUG) || defined(ERTS_ENABLE_LOCK_CHECK)
-            a.mov(ARG4, RET);
-            runtime_call<4>(debug_call_light_bif);
-#else
-            runtime_call(RET, 3);
-#endif
-        }
-
-#ifdef ERTS_MSACC_EXTENDED_STATES
-        {
-            Label skip_msacc = a.newLabel();
-
-            a.cmp(erts_msacc_cache, imm(0));
-            a.short_().je(skip_msacc);
-            {
-                /* Update cache if it was changed in the BIF, stashing the
-                 * return value in TMP_MEM4q. */
-                a.mov(TMP_MEM4q, RET);
-                a.lea(ARG1, erts_msacc_cache);
-                runtime_call<1>(erts_msacc_update_cache);
-                a.mov(RET, TMP_MEM4q);
-
-                /* set state to emulator if msacc has been enabled */
-                a.cmp(erts_msacc_cache, imm(0));
-                a.short_().je(skip_msacc);
-
-                a.mov(ARG1, erts_msacc_cache);
-                a.mov(ARG2, imm(ERTS_MSACC_STATE_EMULATOR));
-                a.mov(ARG3, imm(1));
-                runtime_call<3>(erts_msacc_set_state_m__);
-                a.mov(RET, TMP_MEM4q);
-            }
-            a.bind(skip_msacc);
-        }
-#endif
-
-        /* We must update the active code index in case another process has
-         * loaded new code, as the result of this BIF may be observable on
-         * both ends.
-         *
-         * It doesn't matter whether the BIF modifies anything; if process
-         * A loads new code and calls erlang:monotonic_time/0 soon after,
-         * we'd break the illusion of atomic upgrades if process B still
-         * ran old code after seeing a later timestamp from its own call to
-         * erlang:monotonic_time/0. */
-        emit_leave_runtime<Update::eReductions | Update::eStack |
-                           Update::eHeap | Update::eCodeIndex>();
-
-        /* ERTS_IS_GC_DESIRED_INTERNAL */
-        {
-            /* Test whether GC is forced. */
-            a.test(x86::dword_ptr(c_p, offsetof(Process, flags)),
-                   imm(F_FORCE_GC | F_DISABLE_GC));
-            a.jne(gc_after_bif_call);
-
-            /* Test if binary heap size should trigger GC. */
-            a.mov(ARG1, x86::qword_ptr(c_p, offsetof(Process, bin_vheap_sz)));
-            a.cmp(x86::qword_ptr(c_p, offsetof(Process, off_heap.overhead)),
-                  ARG1);
-            a.ja(gc_after_bif_call);
-
-            /* Test if heap fragment size is larger than remaining heap size. */
-            a.mov(ARG2, x86::qword_ptr(c_p, offsetof(Process, mbuf_sz)));
-            a.lea(ARG1, x86::qword_ptr(HTOP, ARG2, 0, 3));
-            a.cmp(E, ARG1);
-            a.jl(gc_after_bif_call);
-        }
-
-        /* ! FALL THROUGH ! */
-        a.bind(check_bif_return);
-        {
-            Label trap = a.newLabel(), error = a.newLabel();
-
-            emit_test_the_non_value(RET);
-            a.short_().je(trap);
-
-            a.mov(getXRef(0), RET);
-
-            emit_leave_frame();
-            a.and_(RET, RET);   /* Clear Z flag */
-            a.ret();
-
-            a.bind(trap);
-            {
-                a.cmp(x86::qword_ptr(c_p, offsetof(Process, freason)),
-                      imm(TRAP));
-                a.short_().jne(error);
-
-#if !defined(NATIVE_ERLANG_STACK)
-                a.pop(getCPRef());
-#endif
-
-                /* Trap out, our return address is on the Erlang stack.
-                 *
-                 * The BIF_TRAP macros all set up c_p->arity and c_p->current,
-                 * so we can use a simplified context switch. */
-                a.mov(ARG3, x86::qword_ptr(c_p, offsetof(Process, i)));
-                a.jmp(labels[context_switch_simplified]);
-            }
-
-            a.bind(error);
-            {
-                emit_leave_frame();
-                a.xor_(RETd, RETd); /* Set Z flag */
-                a.ret();
-            }
-        }
-
-        a.bind(gc_after_bif_call);
-        {
-            a.mov(ARG2, mbuf_mem);
-            a.mov(ARG5, export_mem);
-            a.movzx(ARG5d,
-                    x86::byte_ptr(ARG5, offsetof(Export, info.mfa.arity)));
-
-            emit_enter_runtime<Update::eReductions | Update::eStack |
-                               Update::eHeap>();
-
-            a.mov(ARG1, c_p);
-            a.mov(ARG3, RET);
-            load_x_reg_array(ARG4);
-            runtime_call<5>(erts_gc_after_bif_call_lhf);
-
-            emit_leave_runtime<Update::eReductions | Update::eStack |
-                               Update::eHeap>();
-
-            a.jmp(check_bif_return);
-        }
-    }
-
-    a.bind(trace);
-    {
-        /* Tail call the export entry instead of the BIF. If we use the native
-         * stack as the Erlang stack our return address is already on the
-         * Erlang stack. Otherwise we will have to move the return address from
-         * the native stack to the Erlang stack. */
-
-        emit_leave_frame();
-
-#if !defined(NATIVE_ERLANG_STACK)
-        /* The return address must be on the Erlang stack. */
-        a.pop(getCPRef());
-#endif
-
-        x86::Mem destination = emit_setup_dispatchable_call(ARG4);
-        a.jmp(destination);
-    }
-
-    a.bind(yield);
-    {
-        a.movzx(ARG2d, x86::byte_ptr(ARG4, offsetof(Export, info.mfa.arity)));
-        a.lea(ARG4, x86::qword_ptr(ARG4, offsetof(Export, info.mfa)));
-        a.mov(x86::byte_ptr(c_p, offsetof(Process, arity)), ARG2.r8());
-        a.mov(x86::qword_ptr(c_p, offsetof(Process, current)), ARG4);
-
-        /* We'll find our way back through ARG3 (entry address). */
-        emit_unwind_frame();
-
-        a.jmp(labels[context_switch_simplified]);
-    }
-}
-
 void BeamModuleAssembler::emit_i_call_pseudo_guard_bif(const ArgWord &Live,
-                                                     const ArgWord &Bif,
-                                                     const ArgExport &Exp,
-                                                     const ArgLabel &Fail) {
+                                                       const ArgWord &Bif,
+                                                       const ArgExport &Exp,
+                                                       const ArgLabel &Fail) {
     Label entry = a.newLabel();
 
     align_erlang_cp();

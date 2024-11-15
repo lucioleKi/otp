@@ -192,6 +192,8 @@ $decl_emit_funcs
 
     x86::Mem emit_i_length_common(Label fail, int state_size);
 
+    void emit_call_bif_common(bool return_error);
+
     void emit_internal_hash_helper();
     void emit_flatmap_get_element();
     void emit_hashmap_get_element();

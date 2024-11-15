@@ -644,9 +644,9 @@ void BeamModuleAssembler::emit_call_light_bif(const ArgWord &Bif,
 }
 
 void BeamModuleAssembler::emit_i_call_pseudo_guard_bif(const ArgWord &Live,
-                                                     const ArgWord &Bif,
-                                                     const ArgExport &Exp,
-                                                     const ArgLabel &Fail) {
+                                                       const ArgWord &Bif,
+                                                       const ArgExport &Exp,
+                                                       const ArgLabel &Fail) {
     Label entry = a.newLabel();
     BeamFile_ImportEntry *e = &beam->imports.entries[Exp.get()];
 
