@@ -634,7 +634,7 @@ void BeamGlobalAssembler::emit_call_bif_common(bool return_error) {
  * ARG4 = export entry
  * RET  = BIF pointer
  *
- * If successful, the result is returned in XREG0.
+ * If successful, the result is returned in RET.
  * In case of error, an exception is raised.
  */
 void BeamGlobalAssembler::emit_call_light_bif_shared() {
@@ -646,8 +646,8 @@ void BeamGlobalAssembler::emit_call_light_bif_shared() {
  * ARG4 = export entry
  * RET = BIF pointer
  *
- * If successful, the result is returned in XREG0.
- * In case of error, XREG0 is THE_NON_VALUE on return.
+ * If successful, the result is returned in RET.
+ * In case of error, Z-flag is set on return.
  */
 void BeamGlobalAssembler::emit_call_pseudo_guard_bif_shared() {
     emit_call_bif_common(true);
