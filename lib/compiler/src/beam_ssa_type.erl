@@ -1042,8 +1042,15 @@ simplify(#b_set{op={succeeded,Kind},args=[Arg],dst=Dst}=I,
             Sub#{ Dst => Lit };
         #t_atom{elements=[false]} when Kind =:= guard ->
             %% Failing operations are only safe to remove in guards.
-            Lit = #b_literal{val=false},
-            Sub#{ Dst => Lit };
+            case Ds0 of
+                #{Arg := #b_set{anno=#{pseudo_bif := true}}} ->
+                    Ts = Ts0#{ Dst => Type },
+                    Ds = Ds0#{ Dst => I },
+                    {I, Ts, Ds};
+                #{} ->
+                    Lit = #b_literal{val=false},
+                    Sub#{ Dst => Lit }
+            end;
         _ ->
             true = is_map_key(Arg, Ds0),        %Assertion.
 
