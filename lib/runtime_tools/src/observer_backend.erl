@@ -524,17 +524,16 @@ fetch_stats_loop(Parent, Time) ->
 %% Chunk sending process info to etop/observer
 %%
 procs_info(Collector) ->
-    All = processes(),
-    Send = fun Send (Pids) ->
-                   try lists:split(10000, Pids) of
-                       {First, Rest} ->
-                           Collector ! {procs_info, self(), etop_collect(First, [])},
-                           Send(Rest)
-                   catch _:_ ->
-                           Collector ! {procs_info, self(), etop_collect(Pids, [])}
+    Send = fun Send (Iter0) ->
+                   case processes_collect(Iter0, [], 10000, 0) of
+                       {Pids, none} ->
+                           Collector ! {procs_info, self(), etop_collect(Pids, [])};
+                       {Pids, Iter1} ->
+                           Collector ! {procs_info, self(), etop_collect(Pids, [])},
+                           Send(Iter1)
                    end
            end,
-    Send(All).
+    Send(erlang:processes_iterator()).
 
 %%
 %% etop backend
@@ -545,15 +544,19 @@ etop_collect(Collector) ->
     %% utilization in etop). Next time the flag will be true and then
     %% there will be a measurement.
     SchedulerWallTime = erlang:statistics(scheduler_wall_time),
-    ProcInfo = etop_collect(processes(), []),
+    {All, _} = processes_collect(erlang:processes_iterator(),
+                                 [],
+                                 erlang:system_info(process_limit),
+                                 0),
+    ProcInfo = etop_collect(All, []),
 
     Collector ! {self(),#etop_info{now = erlang:timestamp(),
-				   n_procs = length(ProcInfo),
-				   run_queue = erlang:statistics(run_queue),
-				   runtime = SchedulerWallTime,
-				   memi = etop_memi(),
-				   procinfo = ProcInfo
-				  }},
+                                   n_procs = length(ProcInfo),
+                                   run_queue = erlang:statistics(run_queue),
+                                   runtime = SchedulerWallTime,
+                                   memi = etop_memi(),
+                                   procinfo = ProcInfo
+                                  }},
 
     case SchedulerWallTime of
 	undefined ->
@@ -561,6 +564,14 @@ etop_collect(Collector) ->
             ok;
 	_ ->
 	    ok
+    end.
+
+processes_collect(Iter, Acc, Limit, Current) when Current >= Limit ->
+    {lists:reverse(Acc), Iter};
+processes_collect(Iter0, Acc, Limit, Current) ->
+    case erlang:processes_next(Iter0) of
+        none -> {lists:reverse(Acc), none};
+        {Pid, Iter1} -> processes_collect(Iter1, [Pid|Acc], Limit, Current + 1)
     end.
 
 flag_holder_proc(Collector) ->
