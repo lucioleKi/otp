@@ -32,7 +32,6 @@
 	 module_script/1,
 	 beam_script/1,
 	 archive_script/1,
-	 archive_script_file_access/1,
 	 epp/1,
 	 create_and_extract/1,
 	 foldl/1,
@@ -56,7 +55,7 @@ all() ->
      emulator_flags_no_shebang, two_lines,
      module_script, beam_script, archive_script, epp,
      create_and_extract, foldl, overflow,
-     archive_script_file_access, unicode, bad_io_server,
+     unicode, bad_io_server,
      bypass_unicode_conversion].
 
 groups() ->
@@ -411,7 +410,7 @@ beam_script(Config) when is_list(Config) ->
 %% Create an archive file containing two entire applications plus two
 %% alternate main modules. Generate a new escript containing the archive
 %% (with .app and .beam files and) and the escript header.
-
+%% Archives in this test have the pre-OTP-28 format.
 archive_script(Config) when is_list(Config) ->
     %% Copy the orig files to priv_dir
     DataDir = proplists:get_value(data_dir, Config),
@@ -459,14 +458,14 @@ archive_script(Config) when is_list(Config) ->
 	[<<"main:[\"-arg1\",\"arg2\",\"arg3\"]\n"
 	   "dict:[{archive_script_dict,[\"foo\",\"bar\"]},{archive_script_dict,[\"foo\"]}]\n"
 	   "dummy:[{archive_script_dummy,[\"bar\"]}]\n"
-	   "priv:{ok,<<\"Some private data...\\n\">>}\n"
+	   "extract: ok\n"
 	   "ExitCode:0">>]),
 
     run_with_opts(Config, PrivDir, "", MainBase ++  " -arg1 arg2 arg3",
 		  [<<"main:[\"-arg1\",\"arg2\",\"arg3\"]\n"
 		     "dict:[{archive_script_dict,[\"foo\",\"bar\"]},{archive_script_dict,[\"foo\"]}]\n"
 		     "dummy:[{archive_script_dummy,[\"bar\"]}]\n"
-		     "priv:{ok,<<\"Some private data...\\n\">>}\n"
+		     "extract: ok\n"
 		     "ExitCode:0">>]),
 
     ok = file:rename(MainScript, MainScript ++ "_with_shebang"),
@@ -481,7 +480,7 @@ archive_script(Config) when is_list(Config) ->
 		  [<<"main:[\"-arg1\",\"arg2\",\"arg3\"]\n"
 		     "dict:[]\n"
 		     "dummy:[]\n"
-		     "priv:{ok,<<\"Some private data...\\n\">>}\n"
+		     "extract: ok\n"
 		     "ExitCode:0">>]),
     ok = file:rename(MainScript, MainScript ++ "_without_shebang"),
 
@@ -494,7 +493,7 @@ archive_script(Config) when is_list(Config) ->
 		  [<<"main:[\"-arg1\",\"arg2\",\"arg3\"]\n"
 		     "dict:[]\n"
 		     "dummy:[]\n"
-		     "priv:{ok,<<\"Some private data...\\n\">>}\n"
+		     "extract: ok\n"
 		     "ExitCode:0">>]),
     ok = file:rename(MainScript, MainScript ++ "_without_header"),
 
@@ -513,150 +512,10 @@ archive_script(Config) when is_list(Config) ->
 	[<<"main2:[\"-arg1\",\"arg2\",\"arg3\"]\n"
 	   "dict:[{archive_script_dict,[\"foo\",\"bar\"]},{archive_script_dict,[\"foo\"]}]\n"
 	   "dummy:[{archive_script_dummy,[\"bar\"]}]\n"
-	   "priv:{ok,<<\"Some private data...\\n\">>}\n"
+	   "extract: ok\n"
 	   "ExitCode:0">>]),
 
     ok.
-
-%% Test the correction of OTP-10071
-%% The errors identified are
-%%
-%% a) If primary archive was named "xxx", then a file in the same
-%%    directory named "xxxyyy" would be interpreted as a file named yyy
-%%    inside the archive.
-%%
-%% b) erl_prim_loader did not correctly create and normalize absolute
-%%    paths for primary archive and files inside it, so unless given
-%%    with exact same path files inside the archive would not be
-%%    found. E.g. if escript was started as ./xxx then "xxx/file"
-%%    would not be found since erl_prim_loader would try to match
-%%    /full/path/to/xxx with /full/path/to/./xxx. Same problem with
-%%    ../. Also, the use of symlinks in the path to the archive would
-%%    cause problems.
-%%
-%% c) Depending on how the primary archive was built,
-%%    erl_prim_loader:list_dir/1 would sometimes return an empty string
-%%    inside the file list. This was a virtual element representing the
-%%    top directory of the archive. This shall not occur.
-%%
-archive_script_file_access(Config) when is_list(Config) ->
-    %% Copy the orig files to priv_dir
-    DataDir = proplists:get_value(data_dir, Config),
-    PrivDir = proplists:get_value(priv_dir, Config),
-
-    MainMod = "archive_script_file_access",
-    MainSrc = MainMod ++ ".erl",
-    MainBeam = MainMod ++ ".beam",
-
-    Archive = filename:join([PrivDir, "archive_script_file_access.zip"]),
-    {ok, _} = zip:create(Archive, ["archive_script_file_access"],
-			 [{compress, []}, {cwd, DataDir}]),
-    {ok, _} = zip:extract(Archive, [{cwd, PrivDir}]),
-    TopDir = filename:join([PrivDir, "archive_script_file_access"]),
-
-    %% Compile the code
-    ok = compile_files([MainSrc], TopDir, TopDir),
-
-    %% First, create a file structure which will be included in the archive:
-    %%
-    %% dir1/
-    %% dir1/subdir1/
-    %% dir1/subdir1/file1
-    %%
-    {ok, OldDir} = file:get_cwd(),
-    ok = file:set_cwd(TopDir),
-    DummyDir = "dir1",
-    DummySubDir = filename:join(DummyDir, "subdir1"),
-    RelDummyFile = filename:join(DummySubDir, "file1"),
-    DummyFile = filename:join(TopDir,RelDummyFile),
-    ok = filelib:ensure_dir(DummyFile),
-    ok = file:write_file(DummyFile, ["foo\nbar\nbaz"]),
-
-    %% 1. Create zip archive by adding the dummy file and the beam
-    %%    file as binaries to zip.
-    %%
-    %% This used to provoke the following issues when the script was run as
-    %% "./<script_name>":
-    %% a. erl_prim_loader:read_file_info/1 returning 'error'
-    %% b. erl_prim_loader:list_dir/1 returning {ok, ["dir1", [], "file1"]}
-    %%    leading to an infinite loop in reltool_target:spec_dir/1
-    Files1 =
-	lists:map(fun(Filename) ->
-			  {ok, Bin} = file:read_file(Filename),
-			  {Filename,Bin}
-		  end,
-		  [RelDummyFile,MainBeam]),
-    {ok, {"mem", Bin1}} = zip:create("mem", Files1, [memory]),
-
-    %% Create the escript
-    ScriptName1 = "archive_script_file_access1",
-    Script1 = filename:join([PrivDir, ScriptName1]),
-    Flags = "-escript main " ++ MainMod,
-    ok = escript:create(Script1,[shebang,{emu_args,Flags},{archive,Bin1}]),
-    ok = file:change_mode(Script1,8#00744),
-
-    %% If supported, create a symlink to the script. This is used to
-    %% test error b) described above this test case.
-    SymlinkName1 = "symlink_to_"++ScriptName1,
-    Symlink1 = filename:join([PrivDir, SymlinkName1]),
-    file:make_symlink(ScriptName1,Symlink1), % will fail if not supported
-
-    %% Also add a dummy file in the same directory with the same name
-    %% as the script except is also has an extension. This used to
-    %% test error a) described above this test case.
-    ok = file:write_file(Script1 ++ ".extension",
-			 <<"same name as script, but with extension">>),
-
-    %% Change to script's directory and run it as "./<script_name>"
-    ok = file:set_cwd(PrivDir),
-    run(Config, PrivDir, "./" ++ ScriptName1 ++ " " ++ ScriptName1,
-	[<<"ExitCode:0">>]),
-    ok = file:set_cwd(TopDir),
-
-
-    %% 2. Create zip archive by letting zip read the files from the file system
-    %%
-    %% The difference compared to the archive_script_file_access1 is
-    %% that this will have a file element for each directory in the
-    %% archive - while archive_script_file_access1 will only have a
-    %% file element per regular file.
-    Files2 = [DummyDir,MainBeam],
-    {ok, {"mem", Bin2}} = zip:create("mem", Files2, [memory]),
-
-    %% Create the escript
-    ScriptName2 = "archive_script_file_access2",
-    Script2 = filename:join([PrivDir, ScriptName2]),
-    ok = escript:create(Script2,[shebang,{emu_args,Flags},{archive,Bin2}]),
-    ok = file:change_mode(Script2,8#00744),
-
-    %% Also add a dummy file in the same directory with the same name
-    %% as the script except is also has an extension. This used to
-    %% test error a) described above this test case.
-    ok = file:write_file(Script2 ++ ".extension",
-			 <<"same name as script, but with extension">>),
-
-    %% If supported, create a symlink to the script. This is used to
-    %% test error b) described above this test case.
-    SymlinkName2 = "symlink_to_"++ScriptName2,
-    Symlink2 = filename:join([PrivDir, SymlinkName2]),
-    file:make_symlink(ScriptName2,Symlink2), % will fail if not supported
-
-    %% Change to script's directory and run it as "./<script_name>"
-    ok = file:set_cwd(PrivDir),
-    run(Config, PrivDir, "./" ++ ScriptName2 ++ " " ++ ScriptName2,
-	[<<"ExitCode:0">>]),
-
-    %% 3. If symlinks are supported, run one of the scripts via a symlink.
-    %%
-    %% This is in order to test error b) described above this test case.
-    case element(1,os:type()) =:= win32 orelse file:read_link(Symlink2) of
-	{ok,_} ->
-	    run(Config, PrivDir, "./" ++ SymlinkName2 ++ " " ++ ScriptName2,
-		[<<"ExitCode:0">>]);
-	_ -> % not supported
-	    ok
-    end,
-    ok = file:set_cwd(OldDir).
 
 
 compile_app(TopDir, AppName) ->
@@ -693,6 +552,7 @@ epp(Config) when is_list(Config) ->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%% Archives in this test have the new (OTP 28) format.
 create_and_extract(Config) when is_list(Config) ->
     {NewFile, FileInfo,
      EmuArg, Source,
@@ -845,25 +705,44 @@ normalize_sections(Sections) ->
 		 [{comment, Comment} | Rest2] ->
 		     [{comment, Comment} |
 		      case Rest2 of
+              [{emu_args, EmuArgs}, {archive, Archive}] ->
+                  {Modules, Files} = beam_bundle_split(Archive),
+                  [{emu_args, EmuArgs},
+                   {modules, Modules}, {files, Files}];
 			  [{emu_args, EmuArgs}, Body] ->
 			      [{emu_args, EmuArgs}, Body];
+              [{archive, Archive}] ->
+                  {Modules, Files} = beam_bundle_split(Archive),
+                  [{emu_args, undefined},
+                  {modules, Modules}, {files, Files}];
 			  [Body] ->
 			      [{emu_args, undefined}, Body]
 		      end
 		     ];
+         [{emu_args, EmuArgs}, {archive, Archive}] ->
+             {Modules, Files} = beam_bundle_split(Archive),
+             [{comment, undefined}, {emu_args, EmuArgs},
+              {modules, Modules}, {files, Files}];
 		 [{emu_args, EmuArgs}, Body] ->
 		     [{comment, undefined}, {emu_args, EmuArgs}, Body];
+         [{archive, Archive}] ->
+             {Modules, Files} = beam_bundle_split(Archive),
+             [{comment, undefined}, {emu_args, undefined},
+              {modules, Modules}, {files, Files}];
 		 [Body] ->
 		     [{comment, undefined}, {emu_args, undefined}, Body]
 	     end
 	    ];
+    [{archive, Archive}] ->
+        {Modules, Files} = beam_bundle_split(Archive),
+        [{shebang, undefined}, {comment, undefined}, {emu_args, undefined},
+        {modules, Modules}, {files, Files}];
 	[Body] ->
 	    [{shebang, undefined}, {comment, undefined}, {emu_args, undefined}, Body]
     end.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-
-
+%% Archives in this test have the new (OTP 28) format.
 foldl(Config) when is_list(Config) ->
     {NewFile, _FileInfo,
      _EmuArg, _Source,
@@ -901,15 +780,14 @@ foldl(Config) when is_list(Config) ->
 
     %% Verify archive scripts
     ok = escript:create(NewFile, [{archive, ArchiveBin}]),
-    {ok, [{BeamBase, #file_info{}, _},
-	  {ErlBase, #file_info{}, _}]}
-	= escript_foldl(Collect, [], NewFile),
+    Bundle1 = beam_bundle_split(ArchiveBin),
+    Bundle1 = escript_foldl(Collect, [], NewFile),
 
     ArchiveFiles = [{ErlBase, ErlCode}, {BeamBase, BeamCode}],
     ok = escript:create(NewFile, [{archive, ArchiveFiles, []}]),
-    {ok, [{BeamBase, _, _},
-	  {ErlBase, _, _}]}
-	= escript_foldl(Collect, [], NewFile),
+    {ok, {_, ArchiveBin2}} = zip:create("dummy.zip", ArchiveFiles, [memory]),
+    Bundle2 = beam_bundle_split(ArchiveBin2),
+    Bundle2 = escript_foldl(Collect, [], NewFile),
 
     ok.
 
@@ -928,8 +806,34 @@ escript_foldl(Fun, Acc, File) ->
 		{archive, ArchiveBin} ->
 		    zip:foldl(Fun, Acc, {File, ArchiveBin})
 	    end;
+    {ok, [_Shebang, _Comment, _EmuArgs, {modules, Modules}, {files, Files}]} ->
+        {Modules, Files};
 	{error, Reason} ->
 	    {error, Reason}
+    end.
+
+%% Helper functions copied from escript.erl to process archives
+beam_bundle_split(Archive) ->
+    {ok, {Beams, OtherFiles}} =
+        zip:foldl(fun do_bundle_split/4, {[], []}, {"", Archive}),
+    {Beams, OtherFiles}.
+
+do_bundle_split(Name, _, Get, {BeamAcc, FileAcc}) ->
+    case filename:extension(Name) of
+        ".beam" ->
+            {[prepare_beam(Get()) | BeamAcc], FileAcc};
+        _ ->
+            {BeamAcc, [{Name, Get()} | FileAcc]}
+    end.
+
+prepare_beam(<<"FOR1",_/binary>> = Beam) ->
+    Beam;
+prepare_beam(Beam0) ->
+    try
+        zlib:gunzip(Beam0)
+    catch
+        error:Error ->
+            error({bad_beam, Error})
     end.
 
 unicode(Config) when is_list(Config) ->

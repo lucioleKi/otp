@@ -39,14 +39,15 @@ main(MainArgs) ->
     ok = application:start(?DICT),
     ok = application:start(?DUMMY),
     
-    %% Access dict priv dir
-    PrivDir = code:priv_dir(?DICT),
-    PrivFile = filename:join([PrivDir, "archive_script_dict.txt"]),
-    case erl_prim_loader:read_file(PrivFile) of
-	{ok, Bin} ->
-	    io:format("priv:~p\n", [{ok, Bin}]);
+    %% Try to extract the escript
+    case escript:extract(escript:script_name(), []) of
+	{ok, Extracted} ->
+        [{shebang, _Shebang}, {comment,_Comment},
+         {emu_args, _Emu}, {archive, Archive}] = Extracted,
+        true = is_binary(Archive),
+	    io:format("extract: ok\n");
 	error ->
-	    io:format("priv:~p\n", [{error, PrivFile}])
+	    io:format("extract: error\n")
     end,
     
     %% Use the dict app
@@ -71,6 +72,5 @@ main(MainArgs) ->
     {file, _} = code:is_loaded(Module),
     true = code:delete(Module),
     false = code:is_loaded(Module),
-    {module, Module} = code:ensure_loaded(Module),
 
     ok.

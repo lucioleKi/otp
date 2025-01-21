@@ -273,11 +273,9 @@ prepare(BadOptions, _) ->
 
 beam_bundle(ZipArchive) ->
     {Beams, OtherFiles} = beam_bundle_split(ZipArchive),
-    Options = [memory],
-    File = "dummy.zip",
-    {ok, {File, OtherArchive}} = zip:create(File, OtherFiles, Options),
-    Packed = zlib:compress(Beams),
+    Packed = term_to_binary(Beams, [{compressed,9}]),
     PackedSize = byte_size(Packed),
+    OtherArchive = term_to_binary(OtherFiles, [{compressed,9}]),
     OtherArchiveSize = byte_size(OtherArchive),
     Bundle = <<?BUNDLE_HEADER,PackedSize:32,Packed/binary,
                OtherArchiveSize:32,OtherArchive/binary>>,
@@ -396,8 +394,8 @@ format_errors(CompileErrors) ->
 return_sections(S, Bin) ->
     {ok, [normalize_section(shebang,  S#sections.shebang),
 	  normalize_section(comment,  S#sections.comment),
-	  normalize_section(emu_args, S#sections.emu_args),
-	  normalize_section(S#sections.type, Bin)]}.
+	  normalize_section(emu_args, S#sections.emu_args)] ++
+	  normalize_section(S#sections.type, Bin)}.
 
 normalize_section(Name, undefined) ->
     {Name, undefined};
@@ -425,16 +423,17 @@ normalize_section(emu_args, "%%!" ++ Chars) ->
     {emu_args, Stripped};
 normalize_section(archive, Bin) ->
     case Bin of
-        <<?BUNDLE_HEADER,BeamSize:32,_:BeamSize/binary,
-          ArchiveSize:32,Archive:ArchiveSize/binary>> ->
-            %% TODO: Also include BEAM files.
-            %% TODO: Add option for escript:extract/2 to exclude BEAM files.
-            {archive, Archive};
+        <<?BUNDLE_HEADER,BeamSize:32,PackedBeam:BeamSize/binary,
+          OtherSize:32,PackedOther:OtherSize/binary>> ->
+            Beams = binary_to_term(PackedBeam, [safe]),
+            OtherArchive = binary_to_term(PackedOther, [safe]),
+            [{modules, Beams},
+             {files, OtherArchive}];
         _ ->
-            {archive, Bin}
+            [{archive, Bin}]
     end;
 normalize_section(Name, Chars) ->
-    {Name, Chars}.
+    [{Name, Chars}].
 
 -doc """
 Returns the name of the escript that is executed.
@@ -575,10 +574,11 @@ parse_and_run(File, Args, Options) ->
             end
     end.
 
-handle_archive(File, <<?BUNDLE_HEADER,BeamSize:32,Beams0:BeamSize/binary,
+handle_archive(_File, <<?BUNDLE_HEADER,BeamSize:32,Beams0:BeamSize/binary,
                        OtherSize:32,OtherFiles:OtherSize/binary>>) ->
-    Beams = separate_beams(zlib:uncompress(Beams0)),
-    {ok, {_, AppFiles}} = extract_archive(File, OtherFiles),
+    Beams = separate_beams(binary_to_term(Beams0, [safe])),
+    UnpackedFiles = binary_to_term(OtherFiles, [safe]),
+    AppFiles = [Name || {Name, _Bin} <- UnpackedFiles, filename:extension(Name) =:= ".app"],
     persistent_term:put(?MODULE, AppFiles),
     {ok,Prepared} = code:prepare_loading(Beams),
     ok = code:finish_loading(Prepared),
@@ -590,13 +590,12 @@ handle_archive(File, Archive) ->
     ok = code:finish_loading(Prepared),
     ok.
 
-separate_beams(<<"FOR1",Size:32,_/binary>> = Bin0) ->
-    <<Beam:(Size+8)/binary-unit:8,Bin/binary>> = Bin0,
+separate_beams([Beam | Beams]) ->
     Info = beam_lib:info(Beam),
     {module, Mod} = lists:keyfind(module, 1, Info),
     File = atom_to_list(Mod) ++ ".erl",
-    [{Mod,File,Beam}|separate_beams(Bin)];
-separate_beams(<<>>) -> [].
+    [{Mod,File,Beam}|separate_beams(Beams)];
+separate_beams([]) -> [].
 
 extract_archive(File, Archive) ->
     zip:foldl(fun do_extract_archive/4, {[], []}, {File, Archive}).
