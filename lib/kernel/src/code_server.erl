@@ -667,21 +667,16 @@ split_base(BaseName) ->
     end.
 
 check_path(Path) ->
-    PathChoice = init:code_path_choice(),
     ArchiveExt = archive_extension(),
-    do_check_path(Path, PathChoice, ArchiveExt, []).
+    do_check_path(Path, ArchiveExt, []).
     
-do_check_path([], _PathChoice, _ArchiveExt, Acc) -> 
+do_check_path([], _ArchiveExt, Acc) -> 
     {ok, lists:reverse(Acc)};
-do_check_path([Dir | Tail], PathChoice, ArchiveExt, Acc) ->
+do_check_path([Dir | Tail], ArchiveExt, Acc) ->
     case is_dir(Dir) of
 	true ->
-	    do_check_path(Tail, PathChoice, ArchiveExt, [Dir | Acc]);
-	false when PathChoice =:= strict ->
-	    %% Be strict. Only use dir as explicitly stated
-	    {error, bad_directory};
-	false when PathChoice =:= relaxed ->
-	    %% Be relaxed
+	    do_check_path(Tail, ArchiveExt, [Dir | Acc]);
+	false ->
 	    case catch lists:reverse(filename:split(Dir)) of
 		{'EXIT', _} ->
 		    {error, bad_directory};
@@ -689,7 +684,7 @@ do_check_path([Dir | Tail], PathChoice, ArchiveExt, Acc) ->
 		    Dir2 = filename:join([App ++ ArchiveExt, App, "ebin"]),
 		    case is_dir(Dir2) of
 			true ->
-			    do_check_path(Tail, PathChoice, ArchiveExt, [Dir2 | Acc]);
+			    do_check_path(Tail, ArchiveExt, [Dir2 | Acc]);
 			false ->
 			    {error, bad_directory}
 		    end;
@@ -712,7 +707,7 @@ do_check_path([Dir | Tail], PathChoice, ArchiveExt, Acc) ->
 			end,
 		    case is_dir(Dir2) of
 			true ->
-			    do_check_path(Tail, PathChoice, ArchiveExt, [Dir2 | Acc]);
+			    do_check_path(Tail, ArchiveExt, [Dir2 | Acc]);
 			false ->
 			    {error, bad_directory}
 		    end;

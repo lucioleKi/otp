@@ -45,7 +45,6 @@
 %%        -profile_boot    : Use an 'eprof light' to profile boot sequence
 %%        -init_debug      : Activate debug printouts in init
 %%        -loader_debug    : Activate debug printouts in erl_prim_loader
-%%        -code_path_choice : strict | relaxed
 
 -module(init).
 -moduledoc """
@@ -78,17 +77,6 @@ The `init` module interprets the following command-line flags:
 
 - **`--`** - Everything following `--` up to the next flag is considered plain
   arguments and can be retrieved using `get_plain_arguments/0`.
-
-- **`-code_path_choice Choice`** - Can be set to `strict` or `relaxed`. It
-  controls how each directory in the code path is to be interpreted:
-
-  - Strictly as it appears in the `boot script`, or
-  - `init` is to be more relaxed and try to find a suitable directory if it can
-    choose from a regular `ebin` directory and an `ebin` directory in an archive
-    file.
-
-  It defaults to `strict` from OTP 27 and this option is scheduled for removal
-  in OTP 28.
 
 - **`-epmd_module Module`** - This flag is deprecated and has been replaced by
   the `kernel` application parameter [`epmd_module`](`e:kernel:kernel_app.md#epmd_module`).
@@ -262,7 +250,7 @@ error
 %% internal exports
 -export([fetch_loaded/0,ensure_loaded/1,make_permanent/2,
 	 notify_when_started/1,wait_until_started/0, 
-	 objfile_extension/0, archive_extension/0,code_path_choice/0,
+	 objfile_extension/0, archive_extension/0,
          get_configfd/1, set_configfd/2]).
 
 -include_lib("kernel/include/file.hrl").
@@ -292,7 +280,6 @@ error
 	 path,
 	 pa,
 	 pz,
-	 path_choice,
 	 prim_load,
 	 load_mode,
 	 vars
@@ -635,18 +622,6 @@ map(_F, []) ->
     [];
 map(F, [X|Rest]) ->
     [F(X) | map(F, Rest)].
-
--doc false.
--spec code_path_choice() -> 'relaxed' | 'strict'.
-code_path_choice() ->
-    case get_argument(code_path_choice) of
-	{ok,[["strict"]]} ->
-	    strict;
-	{ok,[["relaxed"]]} ->
-	    relaxed;
-	_Else ->
-	    strict
-    end.
 
 boot(Start,Flags,Args) ->
     start_on_load_handler_process(),
@@ -1205,9 +1180,7 @@ do_boot(Init,Flags,Start) ->
     catch ?ON_LOAD_HANDLER ! {init_debug_flag,Deb},
     BootVars = get_boot_vars(Root, Flags),
 
-    PathChoice = code_path_choice(),
     Es = #es{init=Init,debug=Deb,path=Path,pa=Pa,pz=Pz,
-	     path_choice=PathChoice,
 	     prim_load=true,load_mode=LoadMode,
 	     vars=BootVars},
     eval_script(BootList, Es),
@@ -1316,12 +1289,11 @@ eval_script([{progress,Info}=Progress|T], #es{debug=Deb}=Es) ->
 eval_script([{preLoaded,_}|T], #es{}=Es) ->
     eval_script(T, Es);
 eval_script([{path,Path}|T], #es{path=false,pa=Pa,pz=Pz,
-				 path_choice=PathChoice,
 				 vars=Vars,debug=Deb}=Es) ->
     debug(Deb, {path,Path},
           fun() ->
                   RealPath0 = make_path(Pa, Pz, Path, Vars),
-                  RealPath = patch_path(RealPath0, PathChoice),
+                  RealPath = patch_path(RealPath0),
                   erl_prim_loader:set_path(RealPath)
           end),
     eval_script(T, Es);
@@ -1427,9 +1399,7 @@ extract_var([$/|Path],Var) -> {reverse(Var),Path};
 extract_var([H|T],Var)     -> extract_var(T,[H|Var]);
 extract_var([],Var)        -> {reverse(Var),[]}.
 
-patch_path(Dirs, strict) ->
-    Dirs;
-patch_path(Dirs, relaxed) ->
+patch_path(Dirs) ->
     ArchiveExt = archive_extension(),
     [patch_dir(Dir, ArchiveExt) || Dir <- Dirs].
 
