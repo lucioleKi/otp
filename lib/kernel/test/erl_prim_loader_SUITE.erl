@@ -400,27 +400,3 @@ ip_str(Host) ->
 host() ->
     {ok,Host} = inet:gethostname(),
     Host.
-
-compile_app(TopDir, AppName) ->
-    AppDir = filename:join([TopDir, AppName]),
-    SrcDir = filename:join([AppDir, "src"]),
-    OutDir = filename:join([AppDir, "ebin"]),
-    {ok, Files} = file:list_dir(SrcDir),
-    compile_files(Files, SrcDir, OutDir).
-
-compile_files([File | Files], SrcDir, OutDir) ->
-    case filename:extension(File) of
-	".erl" ->
-	    AbsFile = filename:join([SrcDir, File]),
-	    case compile:file(AbsFile, [{outdir, OutDir}]) of
-		{ok, _Mod} ->
-		    compile_files(Files, SrcDir, OutDir);
-		Error ->
-		    {compilation_error, AbsFile, OutDir, Error}
-	    end;
-	_ ->
-	    compile_files(Files, SrcDir, OutDir)
-    end;
-compile_files([], _, _) ->
-    ok.
-

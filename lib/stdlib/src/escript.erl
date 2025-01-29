@@ -243,12 +243,8 @@ prepare([H | T], S) ->
 		    throw({Reason, H})
 	    end;
 	{archive, Bin} when is_binary(Bin) ->
-            case beam_bundle(Bin) of
-                {ok, BeamArchive} ->
-                    prepare(T, S#sections{type = archive, body = BeamArchive});
-                {error, Reason} ->
-		    throw({Reason, H})
-            end;
+        {ok, BeamArchive} = beam_bundle(Bin),
+        prepare(T, S#sections{type = archive, body = BeamArchive});
 	{Type, File} when is_list(File) ->
 	    case file:read_file(File) of
 		{ok, Bin} ->
@@ -549,11 +545,7 @@ parse_and_run(File, Args, Options) ->
                             case Mode2 of
                                 run   -> run(Module, Args);
                                 debug -> debug(Module, Module, Args)
-                            end;
-                        {error, bad_eocd} ->
-                            fatal("Not an archive file");
-                        {error, Reason} ->
-                            fatal(Reason)
+                            end
                     end;
                 beam ->
                     case Mode2 of

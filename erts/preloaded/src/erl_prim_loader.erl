@@ -577,7 +577,6 @@ efile_read_file_info(#state{prim_state = PS} = State, File, FollowLinks) ->
     {Res, State#state{prim_state = PS2}}.
 
 efile_timeout_handler(State, _Parent) ->
-    prim_purge_cache(),
     State.
 
 %%% --------------------------------------------------------
@@ -954,21 +953,7 @@ prim_init() ->
             {ok, _} -> true;
             error -> false
         end,
-    cache_new(#prim_state{debug = Deb}).
-
-prim_purge_cache() ->
-    do_prim_purge_cache(get()).
-
-do_prim_purge_cache([{Key,Val}|T]) ->
-    case Val of
-	{Cache,_FI} ->
-	    catch clear_cache(Key, Cache);
-	_ ->
-	    ok
-    end,
-    do_prim_purge_cache(T);
-do_prim_purge_cache([]) ->
-    ok.
+    #prim_state{debug = Deb}.
 
 -doc false.
 -spec prim_read_file(prim_state(), file:filename()) -> {_, prim_state()}.
@@ -996,8 +981,8 @@ prim_read_file_info(PS, File, FollowLinks) ->
     debug(PS, {read_file_info, File}),
     PrimFile = absname(File),
     Res = case FollowLinks of
-            true -> {prim_file:read_file_info(PrimFile), PS};
-            false -> {prim_file:read_link_info(PrimFile), PS}
+            true -> prim_file:read_file_info(PrimFile);
+            false -> prim_file:read_link_info(PrimFile)
         end,
     debug(PS, {return, Res}),
     {Res, PS}.
@@ -1015,21 +1000,6 @@ prim_get_cwd(PS, [Drive]) ->
     Res = prim_file:get_cwd(Drive),
     debug(PS, {return, Res}),
     {Res, PS}.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-
-cache_new(PS) ->
-    PS.
-
-clear_cache(Archive, Cache) ->
-    erase(Archive),
-    case Cache of
-        {ok, PrimZip} ->
-            prim_zip:close(PrimZip);
-        {error, _} ->
-            ok
-    end.
 
 %%% --------------------------------------------------------
 %%% Misc. functions.
