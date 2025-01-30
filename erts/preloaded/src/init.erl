@@ -250,7 +250,7 @@ error
 %% internal exports
 -export([fetch_loaded/0,ensure_loaded/1,make_permanent/2,
 	 notify_when_started/1,wait_until_started/0, 
-	 objfile_extension/0, archive_extension/0,
+	 objfile_extension/0,
          get_configfd/1, set_configfd/2]).
 
 -include_lib("kernel/include/file.hrl").
@@ -1292,8 +1292,7 @@ eval_script([{path,Path}|T], #es{path=false,pa=Pa,pz=Pz,
 				 vars=Vars,debug=Deb}=Es) ->
     debug(Deb, {path,Path},
           fun() ->
-                  RealPath0 = make_path(Pa, Pz, Path, Vars),
-                  RealPath = patch_path(RealPath0),
+                  RealPath = make_path(Pa, Pz, Path, Vars),
                   erl_prim_loader:set_path(RealPath)
           end),
     eval_script(T, Es);
@@ -1398,70 +1397,6 @@ add_var(Path, _) ->
 extract_var([$/|Path],Var) -> {reverse(Var),Path};
 extract_var([H|T],Var)     -> extract_var(T,[H|Var]);
 extract_var([],Var)        -> {reverse(Var),[]}.
-
-patch_path(Dirs) ->
-    ArchiveExt = archive_extension(),
-    [patch_dir(Dir, ArchiveExt) || Dir <- Dirs].
-
-patch_dir(Orig, ArchiveExt) ->
-    case funny_split(Orig, $/) of
-	["nibe", RevApp, RevArchive | RevTop] ->
-	    App = reverse(RevApp),
-	    case funny_splitwith(RevArchive, $.) of
-		{Ext, Base} when Ext =:= ArchiveExt, Base =:= App ->
-		    %% Orig archive
-		    Top = reverse([reverse(C) || C <- RevTop]),
-		    Dir = join(Top ++ [App, "ebin"], "/"),
-		    Archive = Orig;
-		_ ->
-		    %% Orig directory
-		    Top = reverse([reverse(C) || C <- [RevArchive | RevTop]]),
-		    Archive = join(Top ++ [App ++ ArchiveExt, App, "ebin"], "/"),
-		    Dir = Orig
-	    end,
-	    %% First try dir, second try archive and at last use orig if both fails
-	    case erl_prim_loader:read_file_info(Dir) of
-		{ok, #file_info{type = directory}} ->
-		    Dir;
-		_ ->
-		    case erl_prim_loader:read_file_info(Archive) of
-			{ok, #file_info{type = directory}} ->
-			    Archive;
-			_ ->
-			    Orig
-		    end
-	    end;
-	_ ->
-	    Orig
-    end.
-
-%% Returns all lists in reverse order
-funny_split(List, Sep) ->
-   funny_split(List, Sep, [], []).
-
-funny_split([Sep | Tail], Sep, Path, Paths) ->
-    funny_split(Tail, Sep, [], [Path | Paths]);
-funny_split([Head | Tail], Sep, Path, Paths) ->
-    funny_split(Tail, Sep, [Head | Path], Paths);
-funny_split([], _Sep, Path, Paths) ->
-    [Path | Paths].
-
-%% Returns {BeforeSep, AfterSep} where BeforeSep is in reverse order
-funny_splitwith(List, Sep) ->
-    funny_splitwith(List, Sep, [], List).
-
-funny_splitwith([Sep | Tail], Sep, Acc, _Orig) ->
-    {Acc, Tail};
-funny_splitwith([Head | Tail], Sep, Acc, Orig) ->
-    funny_splitwith(Tail, Sep, [Head | Acc], Orig);
-funny_splitwith([], _Sep, _Acc, Orig) ->
-    {[], Orig}.
-
--spec join([string()], string()) -> string().
-join([H1, H2 | T], S) ->
-    H1 ++ S ++ join([H2 | T], S);
-join([H], _) ->
-    H.
 
 %% Servers that are located in the init kernel are linked
 %% and supervised by init.
@@ -1798,11 +1733,6 @@ objfile_extension() ->
 %%      "VEE" -> ".vee";
 %%      "BEAM" -> ".beam"
 %%    end.
-
--doc false.
--spec archive_extension() -> nonempty_string().
-archive_extension() ->
-    ".ez".
 
 %%%
 %%% Support for handling of on_load functions.
