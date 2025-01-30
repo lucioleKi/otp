@@ -106,7 +106,6 @@ The `erl_prim_loader` module interprets the following command-line flags:
          timeout           :: timeout(),	 % idle timeout
          prim_state        :: prim_state()}).    % state for efile code loader
 
--define(EFILE_IDLE_TIMEOUT, (6*60*1000)).	%purge archives
 -define(INET_IDLE_TIMEOUT, (60*1000)). 		%tear down connection timeout
 
 %% Defines for inet as prim_loader
@@ -200,7 +199,7 @@ start_efile(Parent) ->
     PS = prim_init(),
     State = #state {loader = efile,
                     data = noport,
-                    timeout = ?EFILE_IDLE_TIMEOUT,
+                    timeout = infinity,
                     prim_state = PS},
     set_loader_config(efile),
     loop(State, Parent, []).
@@ -519,8 +518,8 @@ handle_exit(State = #state{loader = efile}, _Who, _Reason) ->
 handle_exit(State = #state{loader = inet}, Who, Reason) ->
     inet_exit_port(State, Who, Reason).
 
-handle_timeout(State = #state{loader = efile}, Parent) ->
-    efile_timeout_handler(State, Parent);
+handle_timeout(State = #state{loader = efile}, _Parent) ->
+    State;
 handle_timeout(State = #state{loader = inet}, Parent) ->
     inet_timeout_handler(State, Parent).
 
@@ -575,9 +574,6 @@ efile_read_file(#state{prim_state = PS} = State, File) ->
 efile_read_file_info(#state{prim_state = PS} = State, File, FollowLinks) ->
     {Res, PS2} = prim_read_file_info(PS, File, FollowLinks),
     {Res, State#state{prim_state = PS2}}.
-
-efile_timeout_handler(State, _Parent) ->
-    State.
 
 %%% --------------------------------------------------------
 %%% Read and process severals modules in parallel.
