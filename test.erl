@@ -146,10 +146,11 @@ main(X) ->
 
     %% Test1
     %% [some_test(Res) || E <- X, Res <- [some_test(E)], Res /= ok].
-    [Res || E <- X, Res <- [some_test(E)]].
+    %%[Res || E <- X, Res <- [some_test(E)]].
 
     %% Test 2
-    %% [Res || E <- X, Res <- [some_test(E)], EE <- X, Res /= ok andalso EE /= bar].
+    %%[Res || E <- X, Res <- [some_test(E)], EE <- X, Res /= ok andalso EE /= bar].
+    [{Res,EE} || E <:- X, Res <- [some_test(E)], EE <- X].
 
 some_test(X) ->
     X.

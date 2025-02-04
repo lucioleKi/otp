@@ -2077,17 +2077,17 @@ remove_shadowing_clauses(Clauses) ->
 lc_replace_letin(FVarName, CallbackClause, B) ->
     F = fun (Node) ->
                 maybe
-                    #c_let{vars=[#c_var{}=LetVar], arg=#c_apply{op=Op}, body=LetBody} ?= Node,
+                    #c_let{vars=[#c_var{}=_LetVar], arg=#c_apply{op=Op}, body=_LetBody} ?= Node,
                     true ?= cerl:var_name(Op) == cerl:var_name(FVarName),
-                    io:format("Node~p~n", [Node]),
-                    io:format("CallbackClause~p~n", [CallbackClause]),
+                    #c_clause{body=#c_apply{op=Op1}=A} = CallbackClause,
+                    Node#c_let{arg=A#c_apply{op=Op1}}
                     %% checks if let-bound variable should be removed, e.g.,
                     %% let <_10> = apply 'lc$^1'/1 (_4)
                     %% in ( [Res|_10]
                     %% because lc^1 has been removed.
-                    NewVar = make_var(cerl:get_ann(Node)),
-                    NewBody = lc_replace_var(LetBody, LetVar, NewVar),
-                    cerl:c_let([NewVar], cerl:clause_body(CallbackClause), NewBody)
+                    % NewVar = make_var(cerl:get_ann(Node)),
+                    % NewBody = lc_replace_var(LetBody, LetVar, NewVar),
+                    % cerl:c_let([NewVar], cerl:clause_body(CallbackClause), NewBody)
                 else
                     _ ->
                         Node
@@ -2096,22 +2096,22 @@ lc_replace_letin(FVarName, CallbackClause, B) ->
     cerl_trees:map(F, B).
 
 %% replaces 'ReplacingVar' appearing in 'Node' by 'NewVar'.
--spec lc_replace_var(Node, ReplacingVar, NewVar) -> Result when
-      Node :: cerl:cerl(),
-      ReplacingVar :: cerl:c_var(),
-      NewVar :: cerl:c_var(),
-      Result :: cerl:cerl().
-lc_replace_var(Node, ReplacingVar, NewVar) ->
-    cerl_trees:map(fun (#c_var{}=V) ->
-                           case cerl:var_name(V) == cerl:var_name(ReplacingVar) of
-                               true ->
-                                   NewVar;
-                               _ ->
-                                   V
-                           end;
-                       (Else) ->
-                           Else
-                   end, Node).
+% -spec lc_replace_var(Node, ReplacingVar, NewVar) -> Result when
+%       Node :: cerl:cerl(),
+%       ReplacingVar :: cerl:c_var(),
+%       NewVar :: cerl:c_var(),
+%       Result :: cerl:cerl().
+% lc_replace_var(Node, ReplacingVar, NewVar) ->
+%     cerl_trees:map(fun (#c_var{}=V) ->
+%                            case cerl:var_name(V) == cerl:var_name(ReplacingVar) of
+%                                true ->
+%                                    NewVar;
+%                                _ ->
+%                                    V
+%                            end;
+%                        (Else) ->
+%                            Else
+%                    end, Node).
 
 %% Filter out clauses with an `apply` op calling function 'Name'.
 -spec lc_remove_tail_call_non_existing_fun(Name, Clauses) -> Return when
