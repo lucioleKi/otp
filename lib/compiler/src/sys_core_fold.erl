@@ -99,7 +99,7 @@
 
 -define(CT(Variables),
         (
-          io:format("~n~n[~p] ~p~n~n", [?LINE, Variables])
+          ok%%io:format("~n~n[~p] ~p~n~n", [?LINE, Variables])
         )).
 
 %% Variable value info.
@@ -113,11 +113,11 @@
 	{'ok', cerl:c_module(), [_]}.
 
 module(#c_module{defs=Ds0}=Mod, Opts) ->
-    io:format("Mod: ~p~n~n~n", [Mod]),
+    %%io:format("Mod: ~p~n~n~n", [Mod]),
     put(no_inline_list_funcs, not member(inline_list_funcs, Opts)),
     init_warnings(),
     Ds1 = [function_1(D) || D <- Ds0],
-    io:format("ModEnd: ~p~n~n~n", [Ds1]),
+    %%io:format("ModEnd: ~p~n~n~n", [Ds1]),
     erase(new_var_num),
     erase(no_inline_list_funcs),
     {ok,Mod#c_module{defs=Ds1},get_warnings()}.
@@ -1463,8 +1463,10 @@ shadow_warning([C|Cs], none, Anno) ->
     add_warning(C, {nomatch,shadow}),
     shadow_warning(Cs, none, Anno);
 shadow_warning([C|Cs], Line, Anno) ->
+    io:format("C shadow warning~p~n", [C]),
     case keyfind(function, 1, Anno) of
 	{function, {Name, Arity}} ->
+        io:format("nomatch/4~p~n", [[Line,Name, Arity]]),
             ?CT("BEGGIIIIINNNNNN"),
             ?CT(C),
             ?CT({Line, Anno}),
@@ -1566,6 +1568,7 @@ opt_bool_clauses([#c_clause{pats=[#c_literal{val=Lit}],
                 {true,false,_} ->
                     [C|opt_bool_clauses(Cs, true, SeenF)];
                 _ ->
+                    io:format("opt_bool_clause C~p~n", [C]),
                     add_warning(C, {nomatch,shadow}),
                     opt_bool_clauses(Cs, SeenT, SeenF)
 	    end
@@ -1890,6 +1893,8 @@ case_expand_var(E, #sub{t=Tdb}) ->
 %%     Letrec.
 
 lc_optimisation(Letrec, Sub) ->
+    io:format("lc_optimisation Letrec~p~n", [Letrec]),
+    io:format("Sub~p~n", [Sub]),
     dead_code_elimitation_singleton_list(Letrec, Sub).
     %% case check_if_possible_lc(Letrec) of
     %%     false -> Letrec;
@@ -1931,7 +1936,7 @@ dead_code_elimitation_singleton_list(#c_letrec{defs=Fs0,body=B0}=Letrec, _Sub) -
     case Fs0 of
         %% Deal with multiple defs in letrec
         [{#c_var{}=FunName, #c_fun{vars=[#c_var{}=VarFun], body=BodyFun}}] ->
-            %% io:format("[~p] All changed: ~p~n", [?LINE, FunName]),
+            io:format("[~p] Need to remove: ~p~n", [?LINE, FunName]),
             B1 = cerl_trees:map(
               fun (Node) ->
                       %% checks that the letrec comes from a lc.
@@ -1944,6 +1949,7 @@ dead_code_elimitation_singleton_list(#c_letrec{defs=Fs0,body=B0}=Letrec, _Sub) -
                           true ?= cerl:is_c_list(Args),
                           1 ?= cerl:list_length(Args),
                           BodyFun1 = dead_code_unused_branch(FunName, BodyFun, _Sub),
+                          io:format("BodyFun1~p~n", [BodyFun1]),
                           %% BodyFun1 = BodyFun,
                           cerl:c_let([VarFun], Args, BodyFun1)
                       else
@@ -1951,6 +1957,7 @@ dead_code_elimitation_singleton_list(#c_letrec{defs=Fs0,body=B0}=Letrec, _Sub) -
                               Node
                       end
               end, B0),
+            io:format("[~p] B1: ~p~n", [?LINE, B1]),
             ?CT(["B1 body: \n", B1]),
             Result = case cerl:is_c_let(B1) of
                          true ->
@@ -1961,13 +1968,17 @@ dead_code_elimitation_singleton_list(#c_letrec{defs=Fs0,body=B0}=Letrec, _Sub) -
                              lc_remove_shadow_cases(Letrec)
                      end,
             ?CT(Result),
+            io:format("[~p] Result: ~p~n", [?LINE, Result]),
             Result;
         _ ->
             Letrec
         end.
 
 dead_code_unused_branch(#c_var{}=FVarName, #c_case{clauses=Clauses}=BodyFun, _Sub) ->
-    Clauses1 = lc_remove_tail_call_non_existing_fun(FVarName, Clauses),
+    Clauses0 = lc_remove_tail_call_non_existing_fun(FVarName, Clauses),
+    Clauses1 = lc_remove_inner_tail_call(FVarName, Clauses0, []),
+    io:format("Clauses0~p~n", [Clauses0]),
+    io:format("Clauses1~p~n", [Clauses1]),
     F = fun (#c_clause{body=B}=C) ->
                 [CallbackClause] = lc_extract_callback(Clauses),
                 case CallbackClause == C of
@@ -2068,7 +2079,8 @@ lc_replace_letin(FVarName, CallbackClause, B) ->
                 maybe
                     #c_let{vars=[#c_var{}=LetVar], arg=#c_apply{op=Op}, body=LetBody} ?= Node,
                     true ?= cerl:var_name(Op) == cerl:var_name(FVarName),
-
+                    io:format("Node~p~n", [Node]),
+                    io:format("CallbackClause~p~n", [CallbackClause]),
                     %% checks if let-bound variable should be removed, e.g.,
                     %% let <_10> = apply 'lc$^1'/1 (_4)
                     %% in ( [Res|_10]
@@ -2116,6 +2128,25 @@ lc_remove_tail_call_non_existing_fun(FVarName, Clauses) ->
                                  true
                          end
                  end, Clauses).
+
+lc_remove_inner_tail_call(FVarName, [#c_clause{body=#c_letrec{defs=Fs}=B}=C,Skip|Cs], Acc) ->
+    [{#c_var{}=_FunName, #c_fun{body=#c_case{clauses=BodyFun}=Case}=F}] = Fs,
+    [AccClause,Skip0|Rem]=BodyFun,
+    %% TODO: strict generator
+    BodyFun1 = case Skip of
+        #c_clause{guard=#c_literal{},body=#c_apply{op=Op}=A} ->
+            Skip1 = Skip0#c_clause{body=A#c_apply{op=Op}},
+            [AccClause,Skip1|Rem];
+        _ ->
+            BodyFun
+        end,
+    Fs1 = [{#c_var{}=_FunName, F#c_fun{body=Case#c_case{clauses=BodyFun1}}}],
+    C1 = C#c_clause{body=B#c_letrec{defs=Fs1}},
+    lc_remove_inner_tail_call(FVarName, [Skip|Cs], [C1|Acc]);
+lc_remove_inner_tail_call(FVarName, [C|Cs], Acc) ->
+    lc_remove_inner_tail_call(FVarName, Cs, [C|Acc]);
+lc_remove_inner_tail_call(_,[],Acc) ->
+    reverse(Acc).
 
 %% Extracts the previous callback.
 %% This callback always happens to match the empty case,
