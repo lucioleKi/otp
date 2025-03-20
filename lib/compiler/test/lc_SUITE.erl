@@ -24,7 +24,7 @@
 	 init_per_testcase/2,end_per_testcase/2,
 	 basic/1,deeply_nested/1,no_generator/1,
 	 empty_generator/1,no_export/1,shadow/1,
-	 effect/1]).
+	 effect/1,singleton/1]).
 
 -include_lib("common_test/include/ct.hrl").
 
@@ -43,7 +43,8 @@ groups() ->
        empty_generator,
        no_export,
        shadow,
-       effect
+       effect,
+       singleton
       ]}].
 
 init_per_suite(Config) ->
@@ -277,6 +278,11 @@ effect(Config) when is_list(Config) ->
     end,
 
     ok.
+
+singleton(Config) when is_list(Config) ->
+    A = lists:seq(1,10),
+    A = [Res || E <- lists:seq(1,10), Res <- [id(E)]],
+    A = [Res || E <- lists:seq(1,10), Res <- [E]].
 
 do_effect(Lc, L) ->
     put(?MODULE, []),
