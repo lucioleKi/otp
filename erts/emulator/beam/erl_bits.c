@@ -422,6 +422,124 @@ erts_bs_get_binary_2(Process *p, Uint num_bits, ErlSubBits *sb)
     return result;
 }
 
+static ERTS_INLINE void f32_to_f16(float fp, Uint16 *res_p)
+{
+    union {
+        float f32;
+        Uint32 u32;
+    } u;
+    Uint32 u32;
+    Uint32 sign, exp, mantissa;
+    Uint16 res;
+
+    u.f32 = fp;
+    u32 = u.u32;
+
+    sign = (u32 >> 31) & 0x1;
+    exp = (u32 >> 23) & 0xff;
+    mantissa = (u32 >> (23 - 10)) & 0x3ff;
+    if (exp == 0) {
+        res = sign << 15;
+    } else {
+        int signed_exp = exp - (127 - 15);
+        exp -= (127 - 15);
+        if (signed_exp <= 0) {
+            Uint32 shift;
+            shift = u32 & MAKE_MASK(23);
+            mantissa |= 1 << 23;
+            shift = 1 - signed_exp;
+            if (shift <= 24 ) {
+                Uint32 round = 1 << (shift-1);
+                mantissa = (mantissa + round + ((mantissa >> (shift - 1)) & 1)) >> (shift-1);
+                res = sign << 15 | (mantissa & 0x3ff);
+            } else {
+                // Underflow = 0
+                res = sign << 15;
+            }
+            *res_p = res;
+            return;
+        } else if (exp > 0x1f) {
+            // Infinity or NaN. Missing test cases
+            if (mantissa != 0) {
+                res = (sign << 15) | (0x1f << 10) | 1;
+            } else {
+                res = (sign << 15) | (0x1f << 10);
+            }
+            *res_p = res;
+            return;
+        } else {
+            // Rule: Round to nearest, ties to even
+            // Rounding occurs because we're truncating the lower 13 bits of mantissa
+            // If G is 0, no rounding.
+            // If G is 1, round up if R or S is 1, or if bit_14 is 1.
+            Uint32 bit_11 = u32 & (0x1 << 10); //S
+            Uint32 bit_12 = u32 & (0x1 << 11); //R
+            Uint32 bit_13 = u32 & (0x1 << 12); //G
+            Uint32 bit_14 = u32 & (0x1 << 13);
+            if (bit_13 && ((bit_12 || bit_11) || bit_14)) {
+                // Round up
+                mantissa += 1;
+                if (mantissa == 1 << 10) {
+                    // Mantissa overflow
+                    exp += 1;
+                    mantissa = 0;
+                    if (exp > 0x1f) {
+                        // Overflow = infinity
+                        res = (sign << 15) | (0x1f << 10);
+                        *res_p = res;
+                        return;
+                    }
+                }
+            }
+        }
+        res = sign << 15 | exp << 10 | (mantissa & 0x3ff);
+    }
+    *res_p = res;
+}
+
+static ERTS_INLINE void f16_to_f32(Uint16 fp, float *res_p)
+{
+    union {
+        float f32;
+        Uint32 u32;
+    }u;
+    Uint32 sign, exp, mantissa;
+    Uint32 res;
+
+    sign = (fp >> 15) & 0x1;
+    exp = (fp >> 10) & ((1 << 5) - 1);
+    mantissa = fp & 0x3ff;
+
+    res = sign << 31;
+    if (exp == 0) {
+        if (mantissa != 0) {
+            // Subnormal in f16, can be normalized in f32
+            while ((mantissa & 0x400) == 0) {
+                mantissa <<= 1;
+                exp -= 1;
+            }
+            mantissa = mantissa & 0x3ff;
+            exp = 127 - 15 + 1 + exp;
+            res |= exp << 23;
+            res |= mantissa << 13;
+        }
+    } else if (exp == 0x1f) {
+        // Infinity or NaN
+        res |= 0xff << 23;
+        if (mantissa != 0) {
+            // NaN in f32
+            res |= mantissa << 13;
+        }
+    } else {
+        exp += (127 - 15);
+        res |= exp << 23;
+        res |= mantissa << 13;
+    }
+
+    u.u32 = res;
+    *res_p = u.f32;
+}
+
 Eterm
 erts_bs_get_float_2(Process *p, Uint num_bits, unsigned flags, ErlSubBits *sb)
 {
@@ -463,7 +581,9 @@ erts_bs_get_float_2(Process *p, Uint num_bits, unsigned flags, ErlSubBits *sb)
     }
     ERTS_FP_CHECK_INIT(p);
     if (num_bits == 16) {
-	f.fd = FP16_TO_FP64(f16);
+    f16_to_f32(f16, &f32);
+    f.fd = f32;
+	// f.fd = FP16_TO_FP64(f16);
 	ERTS_FP_ERROR_THOROUGH(p, f.fd, return THE_NON_VALUE);
     } else if (num_bits == 32) {
 	ERTS_FP_ERROR_THOROUGH(p, f32, return THE_NON_VALUE);
@@ -1207,32 +1327,6 @@ erts_bs_put_binary_all(ErlBitsState *EBS, Process *c_p, Eterm arg, Uint unit)
     return 1;
 }
 
-static void f32_to_f16(float fp, Uint16 *res_p)
-{
-    union {
-        float f32;
-        Uint32 u32;
-    } u;
-    Uint32 u32;
-    Uint32 exp;
-    Uint16 res;
-
-    u.f32 = fp;
-    u32 = u.u32;
-
-    exp = (u32 >> 23) & ((1 << 8) - 1);
-    if (exp == 0) {
-        res = (u32 >> 31) << 15;
-    } else {
-        exp -= (127 - 15);
-        res = exp << 10;
-        res |= (u32 >> 31) << 15;
-        res |= (u32 >> (23 - 10)) & 0x3ff;
-    }
-
-    *res_p = res;
-}
-
 /*
  * Returns THE_NON_VALUE on success.
  *
@@ -1319,10 +1413,6 @@ erts_bs_put_float(ErlBitsState *EBS, Process *c_p, Eterm arg, Uint num_bits, int
 	    }
 	} else if (num_bits == 16) {
             Uint16 f16;
-	    union {
-		erlfp16 f16;
-		Uint16 i16;
-	    } u;
 
 	    b = 0;
 	    if (is_float(arg)) {
@@ -1333,8 +1423,9 @@ erts_bs_put_float(ErlBitsState *EBS, Process *c_p, Eterm arg, Uint num_bits, int
                 f32_to_f16((float)f.fd, &f16);
 		a = f16;
 	    } else if (is_small(arg)) {
-		u.f16 = FP16_FROM_FP64(signed_val(arg));
-		a = u.i16;
+        f32_to_f16((float) signed_val(arg), &f16);
+		// u.f16 = FP16_FROM_FP64(signed_val(arg));
+		a = f16;
 	    } else if (is_big(arg)) {
 		double f64;
 		if (big_to_double(arg, &f64) < 0) {
@@ -1343,8 +1434,9 @@ erts_bs_put_float(ErlBitsState *EBS, Process *c_p, Eterm arg, Uint num_bits, int
 		}
 		ERTS_FP_CHECK_INIT(c_p);
 		ERTS_FP_ERROR(c_p,f64,;);
-		u.f16 = FP16_FROM_FP64(f64);
-		a = u.i16;
+        f32_to_f16((float)f64, &f16);
+		// u.f16 = FP16_FROM_FP64(f64);
+		a = f16;
 	    } else {
                 c_p->fvalue = am_type;
 		return arg;
@@ -1501,7 +1593,8 @@ erts_bs_put_float(ErlBitsState *EBS, Process *c_p, Eterm arg, Uint num_bits, int
                 f32_to_f16((float)f.fd, &u16);
 		bptr = (byte *) &u16;
 	    } else if (is_small(arg)) {
-		f16 = FP16_FROM_FP64(signed_val(arg));
+        f32_to_f16((float) signed_val(arg), &f16);
+		// f16 = FP16_FROM_FP64(signed_val(arg));
 		bptr = (byte *) &f16;
 	    } else if (is_big(arg)) {
 		if (big_to_double(arg, &f64) < 0) {
@@ -1510,7 +1603,8 @@ erts_bs_put_float(ErlBitsState *EBS, Process *c_p, Eterm arg, Uint num_bits, int
 		}
 		ERTS_FP_CHECK_INIT(c_p);
 		ERTS_FP_ERROR(c_p,f64,;);
-		f16 = FP16_FROM_FP64(f64);
+		// f16 = FP16_FROM_FP64(f64);
+        f32_to_f16((float)f64, &f16);
 		bptr = (byte *) &f16;
 	    } else {
                 c_p->fvalue = am_type;

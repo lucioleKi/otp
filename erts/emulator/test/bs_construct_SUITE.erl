@@ -1730,6 +1730,7 @@ do_float_be_16(F, N, Pad) ->
     Bin = id(<<Pad:N, (id(F)):16/big-float>>),
     Bin = <<Pad:N, F:(id(16))/big-float>>,
     Bin = <<Pad:N, (id(F)):(id(16))/big-float>>,
+    io:format("<<~p:~p, ~p/binary>> = ~p~n", [Pad, N, FloatBin, Bin]),
     <<Pad:N, FloatBin/binary>> = Bin,
 
     if
