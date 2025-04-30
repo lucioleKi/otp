@@ -150,6 +150,15 @@ expand({op,_Anno,'orelse',ExprL,ExprR}, Vs, N) ->
                  ExpandedExprR,
                  Vs, N3),
      N3 + 1};
+expand({op,_Anno,'or',ExprL,ExprR}, Vs, N) ->
+    {ExpandedExprL,N2} = expand(ExprL, Vs, N),
+    {ExpandedExprR,N3} = expand(ExprR, Vs, N2),
+    Anno = element(2, ExpandedExprL),
+    {bool_switch(ExpandedExprL,
+                 {atom,Anno,true},
+                 ExpandedExprR,
+                 Vs, N3),
+     N3 + 1};
 expand(T, Vs, N) when is_tuple(T) ->
     {TL,N2} = expand(tuple_to_list(T), Vs, N),
     {list_to_tuple(TL),N2};

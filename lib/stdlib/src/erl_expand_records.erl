@@ -997,6 +997,8 @@ opt_rec_vars_1([], Rs) -> Rs.
 
 opt_rec_vars_2({op,_,'and',A1,A2}, Rs) ->
     opt_rec_vars_1([A1,A2], Rs);
+opt_rec_vars_2({'or',_,Ps}, Rs) ->
+    opt_rec_vars_1(Ps, Rs);
 opt_rec_vars_2({op,_,'andalso',A1,A2}, Rs) ->
     opt_rec_vars_1([A1,A2], Rs);
 opt_rec_vars_2({op,_,'orelse',Arg,{atom,_,fail}}, Rs) ->

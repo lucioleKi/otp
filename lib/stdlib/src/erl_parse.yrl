@@ -29,7 +29,7 @@ attribute attr_val
 function function_clauses function_clause
 clause_args clause_guard clause_body
 expr expr_max expr_remote
-pat_expr pat_expr_max map_pat_expr record_pat_expr
+pat_expr pat_expr_0 pat_expr_1 pat_expr_max map_pat_expr record_pat_expr
 pat_argument_list pat_exprs
 list tail
 list_comprehension lc_expr lc_exprs
@@ -293,15 +293,23 @@ expr_max -> fun_expr : '$1'.
 expr_max -> try_expr : '$1'.
 expr_max -> maybe_expr : '$1'.
 
-pat_expr -> pat_expr '=' pat_expr : {match,first_anno('$1'),'$1','$3'}.
-pat_expr -> pat_expr comp_op pat_expr : ?mkop2('$1', '$2', '$3').
-pat_expr -> pat_expr list_op pat_expr : ?mkop2('$1', '$2', '$3').
-pat_expr -> pat_expr add_op pat_expr : ?mkop2('$1', '$2', '$3').
-pat_expr -> pat_expr mult_op pat_expr : ?mkop2('$1', '$2', '$3').
-pat_expr -> prefix_op pat_expr : ?mkop1('$1', '$2').
-pat_expr -> map_pat_expr : '$1'.
-pat_expr -> record_pat_expr : '$1'.
-pat_expr -> pat_expr_max : '$1'.
+pat_expr -> pat_expr_0 : case '$1' of
+    [E] -> E;
+    L -> {'or',?anno('$1'),L}
+end.
+
+pat_expr_0 -> pat_expr_1 : ['$1'].
+pat_expr_0 -> pat_expr_1 'or' pat_expr : ['$1' | '$3'].
+
+pat_expr_1 -> pat_expr_1 '=' pat_expr_1 : {match,first_anno('$1'),'$1','$3'}.
+pat_expr_1 -> pat_expr_1 comp_op pat_expr_1 : ?mkop2('$1', '$2', '$3').
+pat_expr_1 -> pat_expr_1 list_op pat_expr_1 : ?mkop2('$1', '$2', '$3').
+pat_expr_1 -> pat_expr_1 add_op pat_expr_1 : ?mkop2('$1', '$2', '$3').
+pat_expr_1 -> pat_expr_1 mult_op pat_expr_1 : ?mkop2('$1', '$2', '$3').
+pat_expr_1 -> prefix_op pat_expr_1 : ?mkop1('$1', '$2').
+pat_expr_1 -> map_pat_expr : '$1'.
+pat_expr_1 -> record_pat_expr : '$1'.
+pat_expr_1 -> pat_expr_max : '$1'.
 
 pat_expr_max -> var : '$1'.
 pat_expr_max -> atomic : '$1'.
@@ -309,7 +317,7 @@ pat_expr_max -> list : '$1'.
 pat_expr_max -> binary : '$1'.
 pat_expr_max -> sigil : '$1'.
 pat_expr_max -> tuple : '$1'.
-pat_expr_max -> '(' pat_expr ')' : '$2'.
+pat_expr_max -> '(' pat_expr_1 ')' : '$2'.
 
 map_pat_expr -> '#' map_tuple :
 	{map, ?anno('$1'),'$2'}.

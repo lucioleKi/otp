@@ -2101,8 +2101,14 @@ pattern({match,_Anno,Pat1,Pat2}, Vt0, Old, St0) ->
     {Vt1, St3} = vtmerge_pat(Lvt, Rvt, St2),
     {New, St4} = vtmerge_pat(Lnew, Rnew, St3),
     {Vt1, New, St4};
+pattern({'or',_Anno,Ps}, Vt, Old, St0) ->
+    io:format("or pattern~p~n", [Ps]),
+    {{Ut0, Vt0}, St1} = lists:mapfoldl(fun(P,Acc0) -> {UpdVarTable,NewVars,Acc} = pattern(P, Vt, Old, Acc0), {{UpdVarTable, NewVars}, Acc} end, St0, Ps),
+    Ut1 = lists:foldl(fun(Ut,Acc) -> vtmerge_pat(Ut, Acc, St0) end, [], Ut0),
+    {Ut1, Vt0, St1};
 %% Catch legal constant expressions, including unary +,-.
 pattern(Pat, _Vt, _Old, St) ->
+    io:format("Pat~p~n", [Pat]),
     case is_pattern_expr(Pat) of
         true -> {[],[],St};
         false -> {[],[],add_error(element(2, Pat), illegal_pattern, St)}
@@ -2155,6 +2161,8 @@ is_pattern_expr_1({tuple,_Anno,Es}) ->
 is_pattern_expr_1({nil,_Anno}) -> true;
 is_pattern_expr_1({cons,_Anno,H,T}) ->
     is_pattern_expr_1(H) andalso is_pattern_expr_1(T);
+is_pattern_expr_1({'or',_Anno,Ps}) ->
+    all(fun is_pattern_expr_1/1, Ps);
 is_pattern_expr_1({op,_Anno,Op,A}) ->
     erl_internal:arith_op(Op, 1) andalso is_pattern_expr_1(A);
 is_pattern_expr_1({op,_Anno,Op,A1,A2}) ->
@@ -2233,6 +2241,7 @@ pat_bit_expr({string,_,_}, _Old, _new, St) -> {[],[],St};
 pat_bit_expr({bin,A,_}, _Old, _New, St) ->
     {[],[],add_error(A, illegal_pattern, St)};
 pat_bit_expr(P, _Old, _New, St) ->
+    io:format("P~p~n", [P]),
     case is_pattern_expr(P) of
         true -> {[],[],St};
         false -> {[],[],add_error(element(2, P), illegal_pattern, St)}
