@@ -1146,7 +1146,11 @@ pattern(#c_binary{segments=V0}=Pat, Isub, Osub0) ->
 pattern(#c_alias{var=V0,pat=P0}=Pat, Isub, Osub0) ->
     {V1,Osub1} = pattern(V0, Isub, Osub0),
     {P1,Osub} = pattern(P0, Isub, Osub1),
-    {Pat#c_alias{var=V1,pat=P1},Osub}.
+    {Pat#c_alias{var=V1,pat=P1},Osub};
+pattern(#c_pats{pats=Ps0}=Pat, Isub, Osub0) ->
+    {Ps1, Osub1} = lists:mapfoldl(fun(P,Acc0) -> pattern(P,Isub,Acc0) end, Osub0, Ps0),
+    io:format("sys_core_fold pattern Osub1: ~p~n", [Osub1]),
+    {Pat#c_pats{pats=Ps1},Osub1}.
 
 map_pair_pattern_list(Ps0, Isub, Osub0) ->
     {Ps,{_,Osub}} = mapfoldl(fun map_pair_pattern/2, {Isub,Osub0}, Ps0),

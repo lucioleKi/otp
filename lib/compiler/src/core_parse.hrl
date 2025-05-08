@@ -91,6 +91,8 @@
 
 -record(c_opaque, {anno=[] :: list(), val :: any()}).
 
+-record(c_pats, {anno=[] :: list(), pats :: any()}).
+
 -record(c_primop, {anno=[] :: list(), name :: cerl:cerl(),
 		   args :: [cerl:cerl()]}).
 

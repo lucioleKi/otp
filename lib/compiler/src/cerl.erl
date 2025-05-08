@@ -131,7 +131,8 @@ function `type/1`.
          values_arity/1, values_es/1, var_name/1, c_binary/1,
          update_c_binary/2, ann_c_binary/2, is_c_binary/1,
          binary_segments/1, c_bitstr/3, c_bitstr/4, c_bitstr/5,
-         update_c_bitstr/5, update_c_bitstr/6
+         update_c_bitstr/5, update_c_bitstr/6,
+         update_c_pats/2, c_pats/1, ann_c_pats/2, c_pats_pats/1
         ]).
 
 -export_type([c_binary/0, c_bitstr/0, c_call/0, c_clause/0, c_cons/0, c_fun/0,
@@ -158,6 +159,7 @@ function `type/1`.
 -type c_map_pair() :: #c_map_pair{}.
 -type c_module()  :: #c_module{}.
 -type c_opaque()  :: #c_opaque{}.
+-type c_pats() :: #c_pats{}.
 -type c_primop()  :: #c_primop{}.
 -type c_receive() :: #c_receive{}.
 -type c_seq()     :: #c_seq{}.
@@ -170,7 +172,7 @@ function `type/1`.
               | c_call()   | c_case()   | c_catch()   | c_clause()  | c_cons()
               | c_fun()    | c_let()    | c_letrec()  | c_literal()
 	      | c_map()    | c_map_pair()
-	      | c_module() | c_opaque()
+	      | c_module() | c_opaque() | c_pats()
               | c_primop() | c_receive() | c_seq()
               | c_try()    | c_tuple()  | c_values()  | c_var().
 
@@ -196,7 +198,8 @@ function `type/1`.
 -type ctype() :: 'alias'   | 'apply'  | 'binary' | 'bitstr' | 'call' | 'case'
                | 'catch'   | 'clause' | 'cons'   | 'fun'    | 'let'  | 'letrec'
                | 'literal' | 'map'  | 'map_pair' | 'module' | 'primop'
-               | 'receive' | 'seq'    | 'try'    | 'tuple'  | 'values' | 'var'.
+               | 'receive' | 'seq'    | 'try'    | 'tuple'  | 'values' | 'var'
+               | 'or'.
 
 -doc """
 Returns the type tag of `Node`.
@@ -270,7 +273,8 @@ type(#c_try{}) -> 'try';
 type(#c_tuple{}) -> tuple;
 type(#c_values{}) -> values;
 type(#c_var{}) -> var;
-type(#c_opaque{}) -> opaque.
+type(#c_opaque{}) -> opaque;
+type(#c_pats{}) -> 'or'.
 
 -doc """
 Returns `true` if `Node` is a leaf node, otherwise `false`.
@@ -1925,6 +1929,35 @@ _See also: _`c_fname/2`, `fname_id/1`.
 fname_arity(#c_var{name={_,N}}) ->
     N.
 
+
+-doc """
+Placeholder
+""".
+-spec c_pats(Pats :: any()) -> c_pats().
+
+c_pats(Pats) ->
+    #c_pats{pats = Pats}.
+
+
+-doc "_See also: _`c_pats/1`.".
+-spec ann_c_pats(Annotations :: [term()], Pats :: any()) -> c_pats().
+
+ann_c_pats(As, Pats) ->
+    #c_pats{pats = Pats, anno = As}.
+
+-doc "_See also: _`c_pats/1`.".
+-spec update_c_pats(Node :: c_pats(), Pats :: any()) -> c_pats().
+
+update_c_pats(Node, Pats) ->
+    #c_pats{pats = Pats, anno = get_ann(Node)}.
+
+-doc """
+Placeholder
+""".
+-spec c_pats_pats(Node :: c_pats()) -> [any()].
+
+c_pats_pats(Node) ->
+    Node#c_pats.pats.
 
 %% ---------------------------------------------------------------------
 

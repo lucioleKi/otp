@@ -76,7 +76,8 @@ Syntax trees are defined in the module `m:cerl`.
 	       is_c_map_pattern/1, ann_c_map_pattern/2,
 	       map_pair_key/1,map_pair_val/1,map_pair_op/1,
 	       ann_c_map_pair/4,
-	       update_c_map_pair/4
+	       update_c_map_pair/4,
+	       update_c_pats/2, c_pats_pats/1
 	   ]).
 
 -type cerl() :: cerl:cerl().
@@ -213,7 +214,9 @@ map_1(F, T) ->
 			    map_pairs(F, module_attrs(T)),
 			    map_pairs(F, module_defs(T)));
         opaque ->
-            T
+            T;
+	'or' ->
+	    update_c_pats(T, map_list(F, c_pats_pats(T)))
     end.
 
 map_list(F, [T | Ts]) ->
@@ -496,7 +499,9 @@ mapfold(Pre, Post, S00, T0) ->
 		    {Ds, S4} = mapfold_pairs(Pre, Post, S3, module_defs(T)),
 		    Post(update_c_module(T, N, Es, As, Ds), S4);
                 opaque ->
-                    Post(T, S0)
+                    Post(T, S0);
+		'or' ->
+		    Post(T, S0)
 	    end;
 	skip ->
 	    {T0, S00}
@@ -789,7 +794,11 @@ next_free(T, Max) ->
         module ->
             next_free_in_defs(module_defs(T), Max);
         opaque ->
-            Max
+            Max;
+        'or' ->
+            %% Fix this pattern-matching
+            {c_pats, _, [Pat|_]} = T,
+            next_free(Pat, Max)
     end.
 
 next_free_in_list([H | T], Max) ->

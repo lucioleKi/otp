@@ -134,7 +134,6 @@
                     tails=[],tail_pats=[],pres=[],args=[],
                     refill_pats=[],refill_as=[]}).
 -record(isimple,   {anno=#a{},term :: cerl:cerl()}).
-% -record(ipats,     {anno=#a{},pats}).
 
 -type iapply()    :: #iapply{}.
 -type ibinary()   :: #ibinary{}.
@@ -156,7 +155,6 @@
 -type igen()      :: #igen{}.
 -type izip()      :: #izip{}.
 -type isimple()   :: #isimple{}.
-% -type ipats()     :: #ipats{}.
 
 -type i() :: iapply()    | ibinary()   | icall()     | icase()  | icatch()
            | iclause()   | ifun()      | iletrec()   | imatch() | imap()
@@ -266,23 +264,21 @@ defined_functions(Forms) ->
     Fs = [{Name,Arity} || {function,_,Name,Arity,_} <- Forms],
     ordsets:from_list(Fs).
 
-function_dump(module_info,_,_,_) -> ok;
-function_dump(Name,Arity,Format,Terms) ->
-    io:format("~w/~w " ++ Format,[Name,Arity]++Terms),
-    ok.
+%% function_dump(module_info,_,_,_) -> ok;
+%% function_dump(Name,Arity,Format,Terms) ->
+%%     io:format("~w/~w " ++ Format,[Name,Arity]++Terms),
+%%     ok.
 
 function({function,_,Name,Arity,Cs0}, Module, Opts)
   when is_integer(Arity), 0 =< Arity, Arity =< 255 ->
-    io:format("v3_core: function: ~w/~w~n", [Name, Arity]),
     #imodule{file=File, ws=Ws0, nifs=Nifs} = Module,
     try
         St0 = #core{vcount=0,function={Name,Arity},opts=Opts,
                     dialyzer=member(dialyzer, Opts),
                     ws=Ws0,file=[{file,File}]},
         {Cs1,Anno} = handle_debug_line(Cs0, St0),
-        io:format("Cs1~p~n", [Cs1]),
         {B0,St1} = body(Cs1, Name, Arity, St0),
-        ok = function_dump(Name, Arity, "body:~n~p~n",[B0]),
+        %% ok = function_dump(Name, Arity, "body:~n~p~n",[B0]),
         {B1,St2} = ubody(B0, St1),
         %% ok = function_dump(Name, Arity, "ubody:~n~p~n",[B1]),
         {B2,St3} = cbody(B1, Nifs, St2),
@@ -311,9 +307,7 @@ body(Cs0, Name, Arity, St0) ->
     FunAnno = [{function,{Name,Arity}} | Anno],
     {Args0,St1} = new_vars(Anno, Arity, St0),
     Args = reverse(Args0),                      %Nicer order
-    io:format("Args~p~n", [Args]),
     {Cs1,St2} = clauses(Cs0, St1),
-    io:format("Cs1~p~n", [Cs1]),
     {Ps,St3} = new_vars(Arity, St2),    %Need new variables here
     Fc = function_clause(Ps, FunAnno),
     {#ifun{anno=#a{anno=FunAnno},id=[],vars=Args,clauses=Cs1,fc=Fc},St3}.
@@ -329,9 +323,6 @@ clauses([C0|Cs0], St0) ->
 clauses([], St) -> {[],St}.
 
 clause({clause,Lc,H0,G0,B0}, St0) ->
-    io:format("Lc~p~n", [Lc]),
-    io:format("H0~p~n", [H0]),
-    io:format("B0~p~n", [B0]),
     try head(H0, St0) of
 	{H1,St1} ->
 	    {G1,St2} = guard(G0, St1),
@@ -2612,11 +2603,9 @@ pattern({map,L,Pairs}, St0) ->
 pattern({bin,L,Ps}, St0) ->
     {Segments,St} = pat_bin(Ps, St0),
     {#ibinary{anno=#a{anno=lineno_anno(L, St)},segments=Segments},St};
-pattern({'or',_Anno,Ps0}, St0) ->
+pattern({'or',L,Ps0}, St0) ->
     {Ps1, St1} = lists:mapfoldl(fun(P,Acc0) -> pattern(P, Acc0) end, St0, Ps0),
-    io:format("Ps0~p~n", [Ps0]),
-    io:format("Ps1~p~n", [Ps1]),
-    {Ps1,St1};
+    {#c_pats{anno=lineno_anno(L, St1),pats=Ps1},St1};
 pattern({match,_,P1,P2}, St) ->
     %% Handle aliased patterns in a clause. Example:
     %%
@@ -4003,6 +3992,7 @@ skip_lowering(#c_map{}, _A) -> skip;
 skip_lowering(#c_opaque{}, _A) -> skip;
 skip_lowering(#c_primop{}, _A) -> skip;
 skip_lowering(#c_tuple{}, _A) -> skip;
+skip_lowering(#c_pats{}, _A) -> skip;
 skip_lowering(T, A) -> {T, A}.
 
 lexpr(#c_case{}=Case, St) ->
@@ -4294,6 +4284,8 @@ split_pat(#c_alias{pat=Pat}=Alias0, St0) ->
             Alias = Alias0#c_alias{pat=Var},
             {Alias,{split,[Var],Ps,Split},St}
     end;
+split_pat(#c_pats{pats=Pats}, St0) ->
+    split_pats(Pats, St0);
 split_pat(Data, St0) ->
     Type = cerl:data_type(Data),
     Es = cerl:data_es(Data),

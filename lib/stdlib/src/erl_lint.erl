@@ -2101,18 +2101,43 @@ pattern({match,_Anno,Pat1,Pat2}, Vt0, Old, St0) ->
     {Vt1, St3} = vtmerge_pat(Lvt, Rvt, St2),
     {New, St4} = vtmerge_pat(Lnew, Rnew, St3),
     {Vt1, New, St4};
-pattern({'or',_Anno,Ps}, Vt, Old, St0) ->
-    io:format("or pattern~p~n", [Ps]),
-    {{Ut0, Vt0}, St1} = lists:mapfoldl(fun(P,Acc0) -> {UpdVarTable,NewVars,Acc} = pattern(P, Vt, Old, Acc0), {{UpdVarTable, NewVars}, Acc} end, St0, Ps),
-    Ut1 = lists:foldl(fun(Ut,Acc) -> vtmerge_pat(Ut, Acc, St0) end, [], Ut0),
-    {Ut1, Vt0, St1};
+pattern({'or',Anno,Ps}, Vt, Old, St0) ->
+    {List, St1} = lists:mapfoldl(fun(P,Acc0) ->
+                                    {UpdVarTable, NewVars, Acc} = pattern(P, Vt, Old, Acc0),
+                                    {{UpdVarTable, NewVars}, Acc}
+                                 end, St0, Ps),
+    {Uts, New} = lists:unzip(List),
+    {Ut1, St} = vtmerge_pat(hd(Uts), Vt, St1),
+    Mismatches = ordsets:union(New) -- ordsets:intersection(New),
+    Mismatches1 = remove_common(New),
+    Ut = case Mismatches1 of
+             [_,_|_] ->
+                 %% mark all mismatches as unsafe
+                 vtunsafe({'or', Anno}, Ut1, Ut1 -- Mismatches);
+             _ ->
+                 Ut1
+         end,
+    {Ut, Mismatches1 ++ hd(New), St};
 %% Catch legal constant expressions, including unary +,-.
 pattern(Pat, _Vt, _Old, St) ->
-    io:format("Pat~p~n", [Pat]),
     case is_pattern_expr(Pat) of
         true -> {[],[],St};
         false -> {[],[],add_error(element(2, Pat), illegal_pattern, St)}
     end.
+
+remove_common(Lists) ->
+    CommonPats = find_common(Lists),
+    Removed = [ [Tuple || {K, _} = Tuple <- Sublist, not sets:is_element(K, CommonPats)] || Sublist <- Lists],
+    lists:flatten(Removed).
+
+find_common([List|Rest]) ->
+    Pats = ordsets:from_list([K || {K, _} <- List]),
+    CommonPats = lists:foldl(fun(Sublist, Acc) ->
+                    MorePats = ordsets:from_list([K || {K, _} <- Sublist]),
+                    ordsets:intersection(Acc, MorePats)
+                end, Pats, Rest),
+    sets:from_list(CommonPats).
+
 
 pattern_list(Ps, Vt0, Old, St) ->
     foldl(fun (P, {Psvt, Psnew,St0}) ->
@@ -4171,7 +4196,9 @@ handle_generator(P,E,Vt,Uvt,St0) ->
     %% Forget variables local to E immediately.
     Vt1 = vtupdate(vtold(Evt, Vt), Vt),
     {_, St2} = check_unused_vars(Evt, Vt, St1),
+    % io:format("Pattern: ~p~n", [P]),
     {Pvt,Pnew,St3} = comprehension_pattern(P, Vt1, St2),
+    % io:format("Pvt: ~p~n", [Pvt]),
     %% Have to keep fresh variables separated from used variables somehow
     %% in order to handle for example X = foo(), [X || <<X:X>> <- bar()].
     %%                                1           2      2 1

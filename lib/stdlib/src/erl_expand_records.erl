@@ -154,6 +154,9 @@ pattern({match,Anno,Pat1, Pat2}, St0) ->
     {TH,St1} = pattern(Pat2, St0),
     {TT,St2} = pattern(Pat1, St1),
     {{match,Anno,TT,TH},St2};
+pattern({'or',Anno,Ps0}, St0) ->
+    {Ps1,St1} = pattern_list(Ps0, St0),
+    {{'or',Anno,Ps1},St1};
 pattern({op,Anno,Op,A0}, St0) ->
     {A,St1} = pattern(A0, St0),
     {{op,Anno,Op,A},St1};
@@ -997,8 +1000,6 @@ opt_rec_vars_1([], Rs) -> Rs.
 
 opt_rec_vars_2({op,_,'and',A1,A2}, Rs) ->
     opt_rec_vars_1([A1,A2], Rs);
-opt_rec_vars_2({'or',_,Ps}, Rs) ->
-    opt_rec_vars_1(Ps, Rs);
 opt_rec_vars_2({op,_,'andalso',A1,A2}, Rs) ->
     opt_rec_vars_1([A1,A2], Rs);
 opt_rec_vars_2({op,_,'orelse',Arg,{atom,_,fail}}, Rs) ->
@@ -1039,6 +1040,9 @@ opt_pattern({cons,Anno,H0,T0}, Rs0) ->
 opt_pattern({tuple,Anno,Es0}, Rs0) ->
     {Es,Rs} = opt_pattern_list(Es0, Rs0),
     {{tuple,Anno,Es},Rs};
+opt_pattern({'or',Anno,Ps0}, Rs0) ->
+    {Ps,Rs} = opt_pattern_list(Ps0, Rs0),
+    {{'or',Anno,Ps},Rs};
 opt_pattern({match,Anno,Pa0,Pb0}, Rs0) ->
     {Pa,Rs1} = opt_pattern(Pa0, Rs0),
     {Pb,Rs} = opt_pattern(Pb0, Rs1),

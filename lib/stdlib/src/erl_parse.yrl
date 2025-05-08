@@ -45,7 +45,7 @@ try_expr try_catch try_clause try_clauses try_opt_stacktrace
 function_call argument_list
 exprs guard
 atomic strings
-prefix_op mult_op add_op list_op comp_op
+prefix_op mult_op add_op list_op comp_op pat_add_op
 binary bin_elements bin_element bit_expr sigil
 opt_bit_size_expr bit_size_expr opt_bit_type_list bit_type_list bit_type
 top_type top_types type typed_expr typed_attr_val
@@ -111,6 +111,7 @@ Right 160 'andalso'.
 Nonassoc 200 comp_op.
 Right 300 list_op.
 Left 400 add_op.
+Left 400 pat_add_op.
 Left 500 mult_op.
 Unary 600 prefix_op.
 Nonassoc 700 '#'.
@@ -293,23 +294,29 @@ expr_max -> fun_expr : '$1'.
 expr_max -> try_expr : '$1'.
 expr_max -> maybe_expr : '$1'.
 
-pat_expr -> pat_expr_0 : case '$1' of
-    [E] -> E;
-    L -> {'or',?anno('$1'),L}
-end.
+pat_expr -> pat_expr_0 : build_pattern('$1').
 
+pat_expr_0 -> pat_expr_1 'or' pat_expr_0 : ['$1' | '$3'].
 pat_expr_0 -> pat_expr_1 : ['$1'].
-pat_expr_0 -> pat_expr_1 'or' pat_expr : ['$1' | '$3'].
 
 pat_expr_1 -> pat_expr_1 '=' pat_expr_1 : {match,first_anno('$1'),'$1','$3'}.
 pat_expr_1 -> pat_expr_1 comp_op pat_expr_1 : ?mkop2('$1', '$2', '$3').
 pat_expr_1 -> pat_expr_1 list_op pat_expr_1 : ?mkop2('$1', '$2', '$3').
-pat_expr_1 -> pat_expr_1 add_op pat_expr_1 : ?mkop2('$1', '$2', '$3').
+pat_expr_1 -> pat_expr_1 pat_add_op pat_expr_1 : ?mkop2('$1', '$2', '$3').
 pat_expr_1 -> pat_expr_1 mult_op pat_expr_1 : ?mkop2('$1', '$2', '$3').
 pat_expr_1 -> prefix_op pat_expr_1 : ?mkop1('$1', '$2').
 pat_expr_1 -> map_pat_expr : '$1'.
 pat_expr_1 -> record_pat_expr : '$1'.
 pat_expr_1 -> pat_expr_max : '$1'.
+
+%% add_op minus 'or'
+pat_add_op -> '+' : '$1'.
+pat_add_op -> '-' : '$1'.
+pat_add_op -> 'bor' : '$1'.
+pat_add_op -> 'bxor' : '$1'.
+pat_add_op -> 'bsl' : '$1'.
+pat_add_op -> 'bsr' : '$1'.
+pat_add_op -> 'xor' : '$1'.
 
 pat_expr_max -> var : '$1'.
 pat_expr_max -> atomic : '$1'.
@@ -1751,6 +1758,11 @@ first_anno(Abstract) ->
                 end
         end,
     catch fold_anno(F, Anno0, Abstract).
+
+build_pattern([E]) -> E;
+build_pattern([_|_]=Ps) ->
+    Anno = element(2, hd(Ps)),
+    {'or', Anno, Ps}.
 
 last_anno(Abstract) ->
     Fun = fun(Anno, '*') ->

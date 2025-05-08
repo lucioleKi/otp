@@ -30,7 +30,8 @@
          unary_op/1,eq_types/1,match_after_return/1,match_right_tuple/1,
          tuple_size_in_try/1,match_boolean_list/1,
          heisen_variables/1,
-         mutable_variables/1]).
+         mutable_variables/1,
+         or_patterns/1]).
 	 
 -include_lib("common_test/include/ct.hrl").
 
@@ -49,7 +50,8 @@ groups() ->
        match_after_return,match_right_tuple,
        tuple_size_in_try,match_boolean_list,
        heisen_variables,
-       mutable_variables]}].
+       mutable_variables,
+       or_patterns]}].
 
 init_per_suite(Config) ->
     test_lib:recompile(?MODULE),
@@ -1192,6 +1194,9 @@ mutable_variables_1() ->
 mutable_variables_2(Middle, Fun) ->
     {tag,V} = Middle = Fun(),
     V.
+
+or_patterns(Config) when is_list(Config) ->
+    ok.
 
 
 id(I) -> I.
