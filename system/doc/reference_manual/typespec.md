@@ -177,10 +177,11 @@ unknown type, is `[_]` (or `[any()]`), not `[]`. The notation `[]` specifies the
 singleton type for the empty list.
 
 The general form of map types is `#{AssociationList}`. The key types in
-`AssociationList` are allowed to overlap, and if they do, the leftmost
-association takes precedence. A map association has a key in `AssociationList`
-if it belongs to this type. `AssociationList` can contain both mandatory `(:=)`
-and optional `(=>)` association types. If an association type is mandatory, an
+`AssociationList` are allowed to overlap, and if they do, their types and their
+corresponding value types may be combined during analysis, resulting in less
+precise types. A map association has a key in `AssociationList` if it belongs
+to this type. `AssociationList` can contain both mandatory `(:=)` and
+optional `(=>)` association types. If an association type is mandatory, an
 association with that type needs to be present. In the case of an optional
 association type it is not required for the key type to be present.
 

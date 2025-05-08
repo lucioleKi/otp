@@ -1574,12 +1574,12 @@ t_map(L) ->
 -spec t_map(t_map_dict(), erl_type(), erl_type()) -> erl_type().
 
 t_map(Pairs0, DefK0, DefV0) ->
-  DefK1 = lists:foldl(fun({K,_,_},Acc)->t_subtract(Acc,K)end, DefK0, Pairs0),
   {DefK2, DefV1} =
-    case t_is_impossible(DefK1) orelse t_is_impossible(DefV0) of
+    case t_is_impossible(DefK0) orelse t_is_impossible(DefV0) of
       true  -> {?none, ?none};
-      false -> {DefK1, DefV0}
+      false -> {DefK0, DefV0}
     end,
+  io:format("DefK2: ~p, DefV1: ~p~n", [DefK2, DefV1]),
   {Pairs1, DefK3, DefV}
     = case is_singleton_type(DefK2) of
 	true  -> {mapdict_insert({DefK2, ?opt, DefV1}, Pairs0), ?none, ?none};
@@ -4841,38 +4841,48 @@ separate_key(Key) -> [Key].
 
 %% Sorts, combines non-singleton pairs, and applies precedence and
 %% mandatoriness rules.
-map_from_form([], ShdwPs, MKs, Pairs, DefK, DefV) ->
-  verify_possible(MKs, ShdwPs),
+map_from_form([], _ShdwPs, MKs, Pairs, DefK, DefV) ->
+  % verify_possible(MKs, ShdwPs),
   {promote_to_mand(MKs, Pairs), DefK, DefV};
 map_from_form([{SKey,MNess,Val}|SPairs], ShdwPs0, MKs0, Pairs0, DefK0, DefV0) ->
-  Key = lists:foldl(fun({K,_},S)->t_subtract(S,K)end, SKey, ShdwPs0),
-  ShdwPs = case Key of ?none -> ShdwPs0; _ -> [{Key,Val}|ShdwPs0] end,
+  %% Key = lists:foldl(fun({K,_},S)->t_subtract(S,K)end, SKey, ShdwPs0),
+  Val1 = lists:foldl(fun({K,V},Acc)->
+    case t_inf(SKey,K) of
+      ?none -> Acc;
+      _ -> t_sup(V,Acc)
+    end
+  end, Val, ShdwPs0),
+  ShdwPs = [{SKey,Val1}|ShdwPs0],
+  % io:format("ShdwPs: ~p~n", [ShdwPs]),
+  % io:format("SKey: ~p~n", [SKey]),
+  % io:format("Val: ~p~n", [Val]),
+  % ShdwPs = case Key of ?none -> ShdwPs0; _ -> [{Key,Val}|ShdwPs0] end,
   MKs = case MNess of ?mand -> [SKey|MKs0]; ?opt -> MKs0 end,
   if MNess =:= ?mand, SKey =:= ?none -> throw(none);
      true -> ok
   end,
   {Pairs, DefK, DefV} =
-    case is_singleton_type(Key) of
+    case is_singleton_type(SKey) of
       true ->
 	MNess1 = case Val =:= ?none of true -> ?opt; false -> MNess end,
-	{mapdict_insert({Key,MNess1,Val}, Pairs0), DefK0, DefV0};
+	{mapdict_insert({SKey,MNess1,Val1}, Pairs0), DefK0, DefV0};
       false ->
-	case Key =:= ?none orelse Val =:= ?none of
+	case SKey =:= ?none orelse Val =:= ?none of
 	  true  -> {Pairs0, DefK0,             DefV0};
-	  false -> {Pairs0, t_sup(DefK0, Key), t_sup(DefV0, Val)}
+	  false -> {Pairs0, t_sup(DefK0, SKey), t_sup(DefV0, Val1)}
 	end
     end,
   map_from_form(SPairs, ShdwPs, MKs, Pairs, DefK, DefV).
 
 %% Verifies that all mandatory keys are possible, throws 'none' otherwise
-verify_possible(MKs, ShdwPs) ->
-  lists:foreach(fun(M) -> verify_possible_1(M, ShdwPs) end, MKs).
+% verify_possible(MKs, ShdwPs) ->
+%   lists:foreach(fun(M) -> verify_possible_1(M, ShdwPs) end, MKs).
 
-verify_possible_1(M, ShdwPs) ->
-  case lists:any(fun({K,_}) -> t_inf(M, K) =/= ?none end, ShdwPs) of
-    true -> ok;
-    false -> throw(none)
-  end.
+% verify_possible_1(M, ShdwPs) ->
+%   case lists:any(fun({K,_}) -> t_inf(M, K) =/= ?none end, ShdwPs) of
+%     true -> ok;
+%     false -> throw(none)
+%   end.
 
 -spec promote_to_mand([erl_type()], t_map_dict()) -> t_map_dict().
 
