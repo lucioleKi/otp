@@ -1792,6 +1792,8 @@ match1({bin, _, Fs}, <<_/bitstring>>=B, Bs0, BBs, Ef) ->
     eval_bits:match_bits(Fs, B, Bs0, BBs, match_fun(BBs, Ef), EvalFun, ErrorFun);
 match1({bin,_,_}, _, _Bs, _BBs, _Ef) ->
     throw(nomatch);
+match1({'or',_,Ps}, Term, Bs, BBs, Ef) ->
+    match_or(Ps, Term, Bs, BBs, Ef);
 match1({op,_,'++',{nil,_},R}, Term, Bs, BBs, Ef) ->
     match1(R, Term, Bs, BBs, Ef);
 match1({op,_,'++',{cons,Ai,{integer,A2,I},T},R}, Term, Bs, BBs, Ef) ->
@@ -1807,6 +1809,9 @@ match1({op,Anno,Op,A}, Term, Bs, BBs, Ef) ->
 	X ->
 	    match1(X, Term, Bs, BBs, Ef)
     end;
+match1({op,_,'or',_,_}=P, Term, Bs, BBs, Ef) ->
+    Ps = expand_or(P),
+    match_or(Ps, Term, Bs, BBs, Ef);
 match1({op,Anno,Op,L,R}, Term, Bs, BBs, Ef) ->
     case partial_eval({op,Anno,Op,L,R}) of
 	{op,Anno,Op,L,R} ->
@@ -1855,6 +1860,20 @@ match_list([], [], _Anno, Bs, _BBs, _Ef) ->
     {match,Bs};
 match_list(_, _, _Anno, _Bs, _BBs, _Ef) ->
     nomatch.
+
+match_or([P|Ps], Term, Bs0, BBs, Ef) ->
+    case catch match1(P, Term, Bs0, BBs, Ef) of
+        {match,Bs1} -> {match,Bs1};
+        nomatch -> match_or(Ps, Term, Bs0, BBs, Ef)
+    end;
+match_or([], _Term, _Bs0, _BBs, _Ef) ->
+    throw(nomatch).
+
+%% The same logic as erl_expand_records:expand_or/1.
+expand_or({op,_,'or',P1,P2}) ->
+    expand_or(P1) ++ [P2];
+expand_or(P) ->
+    [P].
 
 %% new_bindings()
 %% bindings(Bindings)

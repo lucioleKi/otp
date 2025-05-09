@@ -1149,7 +1149,6 @@ pattern(#c_alias{var=V0,pat=P0}=Pat, Isub, Osub0) ->
     {Pat#c_alias{var=V1,pat=P1},Osub};
 pattern(#c_pats{pats=Ps0}=Pat, Isub, Osub0) ->
     {Ps1, Osub1} = lists:mapfoldl(fun(P,Acc0) -> pattern(P,Isub,Acc0) end, Osub0, Ps0),
-    io:format("sys_core_fold pattern Osub1: ~p~n", [Osub1]),
     {Pat#c_pats{pats=Ps1},Osub1}.
 
 map_pair_pattern_list(Ps0, Isub, Osub0) ->

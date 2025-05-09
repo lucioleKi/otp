@@ -1196,7 +1196,17 @@ mutable_variables_2(Middle, Fun) ->
     V.
 
 or_patterns(Config) when is_list(Config) ->
+    {0,1} = do_or_2({0,1}),
+    {0,1} = do_or_2([0,1]),
+    {'EXIT',{function_clause,_}} = catch do_or_2(0),
+    %% TODO: Fix this in beam_core_to_ssa
+    {'EXIT',{function_clause,_}} = catch do_or_3(0,0),
     ok.
 
+do_or_2({A, B} or [A, B]) ->
+    {A, B}.
+
+do_or_3({A,A,B} or {A,B}, A) ->
+    {A, B}.
 
 id(I) -> I.

@@ -103,7 +103,7 @@
 -record(cg_bin_seg, {size,unit,type,flags,seg,next}).
 -record(cg_bin_int, {size,unit,flags,val,next}).
 -record(cg_bin_end, {}).
--record(cg_or, {pats}).
+% -record(cg_or, {pats}).
 
 %% Other internal records.
 
@@ -795,14 +795,15 @@ pattern(#c_alias{var=Cv,pat=Cp}, Sub0, St0) ->
     {Kvs,Sub1,St1} = pattern_list([Cv|Cvs], Sub0, St0),
     {Kpat,Sub2,St2} = pattern(Cpat, Sub1, St1),
     {#ialias{vars=Kvs,pat=Kpat},Sub2,St2};
-pattern(#c_pats{pats=Ces}, Sub0, St0) ->
-    %% Each pattern may generate different substitutions. Save the substitution
-    %% together with the transformed pattern.
-    {Kes,St1} = mapfoldl(fun(P,St) ->
-                                 {NewP, NewSub, NewSt} = pattern(P, Sub0, St),
-                                 {{NewP, NewSub}, NewSt}
-                         end, St0, Ces),
-    {#cg_or{pats=Kes}, Sub0, St1}.
+pattern(#c_pats{}=Ces, Sub0, St0) ->
+    {Ces,Sub0,St0}.
+    % %% Each pattern may generate different substitutions. Save the substitution
+    % %% together with the transformed pattern.
+    % {Kes,St1} = mapfoldl(fun(P,St) ->
+    %                              {NewP, NewSub, NewSt} = pattern(P, Sub0, St),
+    %                              {{NewP, NewSub}, NewSt}
+    %                      end, St0, Ces),
+    % {#cg_or{pats=Kes}, Sub0, St1}.
 
 flatten_alias(#c_alias{var=V,pat=P}) ->
     {Vs,Pat} = flatten_alias(P),
@@ -1114,7 +1115,9 @@ is_guard_bif(_, _, _) -> false.
 %% kmatch([Var], [Clause], Sub, State) -> {Kexpr,State}.
 
 kmatch(Us, Ccs, Sub, St0) ->
+    % io:format("Ccs~p~n", [Ccs]),
     {Cs,St1} = match_pre(Ccs, Sub, St0),        %Convert clauses
+    % io:format("after match_pre Cs ~p~n", [Cs]),
     Def = fail,
     match(Us, Cs, Def, St1).                    %Do the match.
 
@@ -1127,10 +1130,11 @@ match_pre(Cs, Sub0, St) ->
                   {Kps,Sub1,St1} = pattern_list(Ps, Sub0, St0),
                 %   io:format("Sub0 ~p~n", [Sub0]),
                 %   io:format("Sub1 ~p~n", [Sub1]),
-                %   io:format("Ps ~p~n", [Ps]),
-                %   io:format("Kps ~p~n", [Kps]),
+                % io:format("Ps ~p~n", [Ps]),
+                % io:format("Kps ~p~n", [Kps]),
+                % io:format("G ~p~n", [G]),
                 %   io:format("Sub1~p~n", [Sub1]),
-                %   io:format("Body ~p~n", [B]),
+                % io:format("Body ~p~n", [B]),
                   {[#iclause{anno=A,sub=Sub1,
                              pats=Kps,guard=G,body=B}|Cs0],St1}
           end, {[],St}, Cs).
@@ -1140,26 +1144,39 @@ match_pre(Cs, Sub0, St) ->
 match([_|_]=Vars, Cs0, Def, St0) ->
     %% Expand only the top-level 'or' patterns into a list of clauses.
     %% This will be called recursively, so no need to expand everything.
-    Cs = expand_or_pats(Cs0),
+    % io:format("match Cs0: ~p~n", [Cs0]),
+    {Cs, St1} = expand_or_pats(Cs0, St0),
+    % io:format("after or expand Cs: ~p~n", [Cs]),
     Pcss = partition(Cs),
     foldr(fun (Pcs, {D,St}) ->
                   match_varcon(Vars, Pcs, D, St)
-          end, {Def,St0}, Pcss);
+          end, {Def,St1}, Pcss);
 match([], Cs, Def, St) ->
     match_guard(Cs, Def, St).
 
-expand_or_pats([#iclause{sub=Sub0,pats=[#cg_or{pats=[P|Ps]}|Rest]}=C|Cs0]) ->
-    {Pat, {SubP,_}} = P,
+expand_or_pats([#iclause{sub=Sub0,pats=[#c_pats{pats=[P|Ps]}|Rest]}=C|Cs0], St0) ->
+    {Pat, Sub1, St1} = pattern(P, Sub0, St0),
     %% Add the substitutions from the 'or' pattern to the substitution
     %% of the clause.
-    Sub1 = maps:fold(fun(K,V,Acc) -> set_vsub(K,V,Acc) end, Sub0, SubP),
+    % Sub1 = maps:fold(fun(K,V,Acc) -> set_vsub(K,V,Acc) end, Sub0, SubP),
+    % io:format("SubP~p~n", [SubP]),
     % io:format("Sub expand_or_pats~p~n", [Sub1]),
     C1 = C#iclause{sub=Sub1,pats=[Pat|Rest]},
-    C2 = C#iclause{pats=[#cg_or{pats=Ps}|Rest]},
-    [C1|expand_or_pats([C2|Cs0])];
-expand_or_pats([#iclause{pats=[#cg_or{pats=[]}|_Rest]}|Cs0]) ->
-    Cs0;
-expand_or_pats(Cs) -> Cs.
+    C2 = C#iclause{pats=[#c_pats{pats=Ps}|Rest]},
+    {Cs1, St2} = expand_or_pats([C2|Cs0], St1),
+    {[C1|Cs1], St2};
+expand_or_pats([#iclause{sub=Sub0,pats=[#ialias{pat=#c_pats{pats=[P|Ps]}}=Alias0]}=C|Cs0], St0) ->
+    {Pat, Sub1, St1} = pattern(P, Sub0, St0),
+    C1 = C#iclause{sub=Sub1,pats=[Alias0#ialias{pat=Pat}]},
+    C2 = C#iclause{pats=[Alias0#ialias{pat=#c_pats{pats=Ps}}]},
+    {Cs1, St2} = expand_or_pats([C2|Cs0], St1),
+    {[C1|Cs1], St2};
+expand_or_pats([#iclause{pats=[#ialias{pat=#c_pats{pats=[]}}]}|Cs0], St) ->
+    {Cs0, St};
+expand_or_pats([#iclause{pats=[#c_pats{pats=[]}|_Rest]}|Cs0], St) ->
+    {Cs0, St};
+expand_or_pats(Cs, St) ->
+    {Cs, St}.
 
 %% match_guard([Clause], Default, State) -> {IfExpr,State}.
 %%  Build a guard to handle guards. A guard *ALWAYS* fails if no

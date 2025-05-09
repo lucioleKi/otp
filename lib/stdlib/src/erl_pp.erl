@@ -811,11 +811,8 @@ lexpr({match,_,Lhs,Rhs}, Prec, Opts) ->
     Rl = lexpr(Rhs, R, Opts),
     El = {list,[{cstep,[Pl,' ='],Rl}]},
     maybe_paren(P, Prec, El);
-lexpr({'or',_,Ps}, Prec, Opts) ->
-    {_L,P,_R} = inop_prec('or'),
-    Pl = lexpr(Ps, P, Opts),
-    El = {list, Pl},
-    maybe_paren(P, Prec, El);
+lexpr({'or',_,Ps}, _Prec, Opts) ->
+    {prefer_nl, ["or"], lexprs(Ps, Opts)};
 lexpr({op,_,Op,Arg}, Prec, Opts) when Op =:= '+';
                                       Op =:= '-' ->
     {P,R} = preop_prec(Op),

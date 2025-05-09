@@ -3453,6 +3453,10 @@ upattern(#imappair{op=#c_literal{val=exact},key=K0,val=V0}=Pair,Ks,St0) ->
 upattern(#ibinary{segments=Es0}=Bin, Ks, St0) ->
     {Es1,Esg,Esv,Eus,St1} = upat_bin(Es0, Ks, St0),
     {Bin#ibinary{segments=Es1},Esg,Esv,Eus,St1};
+upattern(#c_pats{pats=[H0|_]=Pats0}=C, Ks, St0)->
+    {_,Hg,Hv,Hu,St1} = upattern(H0, Ks, St0),
+    Pats1 = foldl(fun(P, Acc) -> {P1, _, _, _, _} = upattern(P, Ks, St0), [P1|Acc] end, [], Pats0),
+    {C#c_pats{pats=reverse(Pats1)}, Hg,Hv,Hu, St1};
 upattern(#c_alias{var=V0,pat=P0}=Alias, Ks, St0) ->
     {V1,Vg,Vv,Vu,St1} = upattern(V0, Ks, St0),
     {P1,Pg,Pv,Pu,St2} = upattern(P0, known_union(Ks, Vv), St1),
@@ -3719,6 +3723,9 @@ cpattern(#imap{anno=#a{anno=Anno},es=Es}) ->
 cpattern(#ibinary{anno=#a{anno=Anno},segments=Segs0}) ->
     Segs = [cpat_bin_seg(S) || S <- Segs0],
     #c_binary{anno=Anno,segments=Segs};
+cpattern(#c_pats{pats=Pats0}=C) ->
+    Pats1 = [cpattern(P) || P <- Pats0],
+    C#c_pats{pats=Pats1};
 cpattern(Other) -> Other.
 
 cpat_map_pairs([#imappair{anno=#a{anno=Anno},op=Op,key=Key0,val=Val0}|T]) ->

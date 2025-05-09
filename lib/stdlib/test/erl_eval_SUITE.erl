@@ -174,6 +174,15 @@ match_pattern(Config) when is_list(Config) ->
     check(fun() -> A = 4, B = 28, <<13:(A+(X=B))>>, X end,
 	  "begin A = 4, B = 28, <<13:(A+(X=B))>>, X end.",
 	  28),
+    check(fun() -> case {a, b} of {c, _X} or {a, _X}=Y -> {x,Y} end end,
+	  "case {a, b} of {c, X} or {a, X}=Y -> {x,Y} end. ",
+	  {x, {a, b}}),
+    check(fun() -> case {a, b} of Y={a, _X} or {c, _X}-> {x,Y} end end,
+	  "case {a, b} of Y={a, X} or {c, X} -> {x,Y} end. ",
+	  {x, {a, b}}),
+    check(fun() -> case {a, b} of Y={c, _X} or {a, _X}=Z -> {Z,Y} end end,
+	  "case {a, b} of Y={c, X} or {a, X}=Z -> {Z,Y} end. ",
+	  {{a, b}, {a, b}}),
     ok.
 
 %% Binary match problems.
@@ -188,6 +197,9 @@ match_bin(Config) when is_list(Config) ->
 	  "begin <<Size,B:Size/binary,Rest/binary>> = <<2,\"AB\",\"CD\">>, "
 	  "{Size,B,Rest} end. ",
 	  {2,<<"AB">>,<<"CD">>}),
+    check(fun() -> <<"b">> or <<"abc">> = <<"abc">> end,
+	  "<<\"b\">> or <<\"abc\">> = <<\"abc\">>. ",
+	  <<"abc">>),
     ok.
 
 %% OTP-3144: compile-time expressions in pattern.
@@ -198,6 +210,9 @@ pattern_expr(Config) when is_list(Config) ->
     check(fun() -> case 2 of +2 -> ok end end,
 	  "case 2 of +2 -> ok end. ",
 	  ok),
+    check(fun() -> case 4 of 3 or (2+2) or 5 -> ok end end,
+      "case 4 of 3 or (2+2) or 5 -> ok end. ",
+      ok),
     ok.
 
 %% OTP-4518.

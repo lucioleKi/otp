@@ -160,10 +160,18 @@ pattern({'or',Anno,Ps0}, St0) ->
 pattern({op,Anno,Op,A0}, St0) ->
     {A,St1} = pattern(A0, St0),
     {{op,Anno,Op,A},St1};
+pattern({op,Anno,'or',_,_}=P, St) ->
+    Ps = expand_or(P),
+    pattern({'or',Anno,Ps},St);
 pattern({op,Anno,Op,L0,R0}, St0) ->
     {L,St1} = pattern(L0, St0),
     {R,St2} = pattern(R0, St1),
     {{op,Anno,Op,L,R},St2}.
+
+expand_or({op,_,'or',P1,P2}) ->
+    expand_or(P1) ++ [P2];
+expand_or(P) ->
+    [P].
 
 pattern_list([P0 | Ps0], St0) ->
     {P,St1} = pattern(P0, St0),

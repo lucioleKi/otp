@@ -513,6 +513,10 @@ pattern(#c_binary{segments=Ss}, Def, Ps, St0) ->
 pattern(#c_alias{var=V,pat=P}, Def, Ps, St0) ->
     {Vvs,St1} = variable(V, Ps, St0),
     pattern(P, Def, union(Vvs, Ps), St1);
+pattern(#c_pats{pats=[H0|_]=Pats0}, Def, Ps0, St0) ->
+    {Ps1, St1} = pattern(H0, Def, Ps0, St0),
+    _ = foldl(fun (P, Acc) -> {P1,_}=pattern(P, Def, Ps0, St0), [P1|Acc] end, Ps0, Pats0),
+    {Ps1, St1};
 pattern(_Other, _, Ps, St) ->
     %%io:fwrite("clint pattern: ~p~n", [_Other]),
     {Ps,add_error({not_pattern,St#lint.func}, St)}.

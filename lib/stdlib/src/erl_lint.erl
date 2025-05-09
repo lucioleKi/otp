@@ -2101,6 +2101,9 @@ pattern({match,_Anno,Pat1,Pat2}, Vt0, Old, St0) ->
     {Vt1, St3} = vtmerge_pat(Lvt, Rvt, St2),
     {New, St4} = vtmerge_pat(Lnew, Rnew, St3),
     {Vt1, New, St4};
+pattern({op,Anno,'or',_,_}=P, Vt, Old, St0) ->
+    Ps = expand_or(P),
+    pattern({'or', Anno, Ps}, Vt, Old, St0);
 pattern({'or',Anno,Ps}, Vt, Old, St0) ->
     {List, St1} = lists:mapfoldl(fun(P,Acc0) ->
                                     {UpdVarTable, NewVars, Acc} = pattern(P, Vt, Old, Acc0),
@@ -2124,6 +2127,11 @@ pattern(Pat, _Vt, _Old, St) ->
         true -> {[],[],St};
         false -> {[],[],add_error(element(2, Pat), illegal_pattern, St)}
     end.
+
+expand_or({op,_,'or',P1,P2}) ->
+    expand_or(P1) ++ [P2];
+expand_or(P) ->
+    [P].
 
 remove_common(Lists) ->
     CommonPats = find_common(Lists),
@@ -2266,7 +2274,6 @@ pat_bit_expr({string,_,_}, _Old, _new, St) -> {[],[],St};
 pat_bit_expr({bin,A,_}, _Old, _New, St) ->
     {[],[],add_error(A, illegal_pattern, St)};
 pat_bit_expr(P, _Old, _New, St) ->
-    io:format("P~p~n", [P]),
     case is_pattern_expr(P) of
         true -> {[],[],St};
         false -> {[],[],add_error(element(2, P), illegal_pattern, St)}
@@ -4196,9 +4203,7 @@ handle_generator(P,E,Vt,Uvt,St0) ->
     %% Forget variables local to E immediately.
     Vt1 = vtupdate(vtold(Evt, Vt), Vt),
     {_, St2} = check_unused_vars(Evt, Vt, St1),
-    % io:format("Pattern: ~p~n", [P]),
     {Pvt,Pnew,St3} = comprehension_pattern(P, Vt1, St2),
-    % io:format("Pvt: ~p~n", [Pvt]),
     %% Have to keep fresh variables separated from used variables somehow
     %% in order to handle for example X = foo(), [X || <<X:X>> <- bar()].
     %%                                1           2      2 1
