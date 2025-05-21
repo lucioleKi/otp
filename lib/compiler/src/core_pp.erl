@@ -375,7 +375,9 @@ format_1(#c_module{name=N,exports=Es,attrs=As,defs=Ds}, Ctxt) ->
      | "end"
     ];
 format_1(#c_opaque{val=V}, Ctxt) ->
-    ["%% Opaque: ", format_1(#c_literal{val=V}, Ctxt)].
+    ["%% Opaque: ", format_1(#c_literal{val=V}, Ctxt)];
+format_1(#c_pats{pats=Pats}, Ctxt) ->
+    [format_hseq(Pats, "or", add_indent(Ctxt, 1), fun format/2)].
 
 format_funcs(Fs, Ctxt) ->
     format_vseq(Fs,
