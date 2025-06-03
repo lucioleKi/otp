@@ -227,6 +227,10 @@ trees.
          integer_range_type/2,
          integer_range_type_low/1,
          integer_range_type_high/1,
+	 in_range_type/3,
+	 in_range_type_var/1,
+	 in_range_type_low/1,
+	 in_range_type_high/1,
 	 list/1,
 	 list/2,
 	 list_comp/2,
@@ -535,6 +539,7 @@ reason `badarg`. Node types currently defined by this module are:
 * `infix_expr`
 * `integer`
 * `integer_range_type`
+* `in_range_type`
 * `list`
 * `list_comp`
 * `macro`
@@ -637,6 +642,7 @@ type(Node) ->
         {'else', _, _} -> else_expr;
 	{'receive', _, _, _, _} -> receive_expr;
 	{'receive', _, _} -> receive_expr;
+	{'in',_,_,_,_} -> in_range_type;
 	{attribute, _, _, _} -> attribute;
 	{bin, _, _} -> binary;
 	{bin_element, _, _, _, _} -> binary_field;
@@ -5297,6 +5303,81 @@ integer_range_type_high(Node) ->
     end.
 
 
+-record(in_range_type, {var :: syntaxTree(),
+                        low :: syntaxTree(),
+                        high :: syntaxTree()}).
+
+-doc """
+Creates an abstract range type.
+
+The result represents "`Var in Low .. High`".
+
+_See also: _`in_range_type_var/1`, `in_range_type_high/1`, `in_range_type_low/1`.
+""".
+-spec in_range_type(syntaxTree(), syntaxTree(), syntaxTree()) -> syntaxTree().
+
+%% `erl_parse' representation:
+%%
+%% {in, Pos, Var, Low, High}
+%%
+%%      Low = erl_parse()
+%%      High = erl_parse()
+
+in_range_type(Var, Low, High) ->
+    tree(in_range_type, #in_range_type{var = Var, low = Low, high = High}).
+
+revert_in_range_type(Node) ->
+    Pos = get_pos(Node),
+    Var = in_range_type_var(Node),
+    Low = in_range_type_low(Node),
+    High = in_range_type_high(Node),
+    {'in', Pos, Var, Low, High}.
+
+-doc """
+Returns the variable of an `in_range_type` node.
+
+_See also: _`in_range_type/2`.
+""".
+-spec in_range_type_var(syntaxTree()) -> syntaxTree().
+
+in_range_type_var(Node) ->
+    case unwrap(Node) of
+        {'in', _, Var, _, _} ->
+            Var;
+        Node1 ->
+            (data(Node1))#in_range_type.var
+    end.
+
+-doc """
+Returns the low limit of an `in_range_type` node.
+
+_See also: _`in_range_type/2`.
+""".
+-spec in_range_type_low(syntaxTree()) -> syntaxTree().
+
+in_range_type_low(Node) ->
+    case unwrap(Node) of
+        {'in', _, _, Low, _} ->
+            Low;
+        Node1 ->
+            (data(Node1))#in_range_type.low
+    end.
+
+-doc """
+Returns the high limit of an `in_range_type` node.
+
+_See also: _`in_range_type/2`.
+""".
+-spec in_range_type_high(syntaxTree()) -> syntaxTree().
+
+in_range_type_high(Node) ->
+    case unwrap(Node) of
+        {'in', _, _, _, High} ->
+            High;
+        Node1 ->
+            (data(Node1))#in_range_type.high
+    end.
+
 %% =====================================================================
 
 -record(record_type, {name :: syntaxTree(),
@@ -7589,6 +7670,8 @@ revert_root(Node) ->
 	    revert_integer(Node);
         integer_range_type ->
             revert_integer_range_type(Node);
+	in_range_type ->
+            revert_in_range_type(Node);
 	list ->
 	    revert_list(Node);
 	list_comp ->
@@ -7885,6 +7968,10 @@ subtrees(T) ->
                 integer_range_type ->
                     [[integer_range_type_low(T)],
                      [integer_range_type_high(T)]];
+		in_range_type ->
+		    [[in_range_type_var(T)],
+		     [in_range_type_low(T)],
+                     [in_range_type_high(T)]];
 		list ->
 		    case list_suffix(T) of
 			none ->
@@ -8099,6 +8186,7 @@ make_tree(if_expr, [C]) -> if_expr(C);
 make_tree(implicit_fun, [[N]]) -> implicit_fun(N);
 make_tree(infix_expr, [[L], [F], [R]]) -> infix_expr(L, F, R);
 make_tree(integer_range_type, [[L],[H]]) -> integer_range_type(L, H);
+make_tree(in_range_type, [[V],[L],[H]]) -> in_range_type(V, L, H);
 make_tree(list, [P]) -> list(P);
 make_tree(list, [P, [S]]) -> list(P, S);
 make_tree(list_comp, [[T], B]) -> list_comp(T, B);

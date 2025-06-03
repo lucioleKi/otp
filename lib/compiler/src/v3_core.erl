@@ -393,6 +393,14 @@ gexpr({protect,Line,Arg}, Bools0, St0) ->
             Anno = lineno_anno(Line, St),
 	    {#iprotect{anno=#a{anno=Anno},body=Eps++[E]},[],Bools0,St}
     end;
+gexpr({'in',Anno,Var,L,R}, _Bools0, St0) ->
+    G1 = guard_tests([{call,Anno,
+           {remote,Anno,{atom,Anno,erlang},{atom,Anno,is_integer}},
+           [Var]},
+     {op,Anno,'=<',L,Var},
+     {op,Anno,'=<',Var,R}]),
+    {E1,_,Bools1,St1} = gexpr(G1,[],St0),
+    {E1, [], Bools1, St1#core{in_guard=true}};
 gexpr({op,_,'andalso',_,_}=E0, Bools, St0) ->
     {op,L,'andalso',E1,E2} = right_assoc(E0, 'andalso'),
     Anno = lineno_anno(L, St0),

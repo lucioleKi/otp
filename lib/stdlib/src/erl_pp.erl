@@ -811,6 +811,10 @@ lexpr({match,_,Lhs,Rhs}, Prec, Opts) ->
     Rl = lexpr(Rhs, R, Opts),
     El = {list,[{cstep,[Pl,' ='],Rl}]},
     maybe_paren(P, Prec, El);
+lexpr({'in',_,Var,R1,R2}, _Prec, Opts) ->
+    {L,_P,_} = inop_prec('in'),
+    Vl = lexpr(Var, L, Opts),
+    {list,[{step,[Vl,leaf(" in ")],[lexpr(R1, 0, Opts),leaf(".."),lexpr(R2, 0, Opts)]}]};
 lexpr({op,_,Op,Arg}, Prec, Opts) when Op =:= '+';
                                       Op =:= '-' ->
     {P,R} = preop_prec(Op),
@@ -1478,7 +1482,7 @@ wordtable() ->
     L = [begin {leaf,Sz,S} = leaf(W), {S,Sz} end ||
             W <- [" ->"," =","<<",">>","[]","after","begin","case","catch",
                   "end","fun","if","of","receive","try","when"," ::","..",
-                  " |","maybe","else","#{"]],
+                  " |","maybe","else","#{","in"]],
     list_to_tuple(L).
 
 word(' ->', WT) -> element(1, WT);
@@ -1502,7 +1506,8 @@ word('..', WT) -> element(18, WT);
 word(' |', WT) -> element(19, WT);
 word('maybe', WT) -> element(20, WT);
 word('else', WT) -> element(21, WT);
-word('#{', WT) -> element(22, WT).
+word('#{', WT) -> element(22, WT);
+word('in', WT) -> element(23, WT).
 
 %% Make up an unique variable name for Name that won't clash with any
 %% name in Used. We first try by converting the name to uppercase and

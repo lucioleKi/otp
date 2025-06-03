@@ -478,6 +478,8 @@ expr({match,Anno,P0,E0}, St0) ->
     {E,St1} = expr(E0, St0),
     {P,St2} = pattern(P0, St1),
     {{match,Anno,P,E},St2};
+expr({'in',Anno,Var,L,R}, St) ->
+    {{'in',Anno,Var,L,R}, St};
 expr({op,Anno,'not',A0}, St0) ->
     {A,St1} = bool_operand(A0, St0),
     {{op,Anno,'not',A},St1};

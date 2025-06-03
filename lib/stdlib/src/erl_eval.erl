@@ -1674,6 +1674,16 @@ guard_test({call,A,{remote,Ar,{atom,Am,erlang},{atom,Af,F}},As0},
     TT = type_test(F),
     G = {call,A,{remote,Ar,{atom,Am,erlang},{atom,Af,TT}},As0},
     expr_guard_test(G, Bs0, Lf, Ef);
+guard_test({'in',A,Var,L,{integer,_,R0}}, Bs0, Lf, Ef) ->
+    R1 = {integer,A,R0+1},
+    %% Rewrite X in A..B to is_integer(X), A =< X, X < B
+    G = [{call,A,{atom,A,is_integer},[Var]},
+        {op,A,'=<',L,Var},
+        {op,A,'<',Var,R1}],
+    case guard0(G, Bs0, Lf, Ef) of
+        true -> {value,true,Bs0};
+        false -> {value,false,Bs0}
+    end;
 guard_test(G, Bs0, Lf, Ef) ->
     expr_guard_test(G, Bs0, Lf, Ef).
 

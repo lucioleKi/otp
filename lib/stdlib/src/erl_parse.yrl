@@ -86,6 +86,7 @@ char integer float atom sigil_prefix string sigil_suffix var
 'after' 'begin' 'case' 'try' 'catch' 'end' 'fun' 'if' 'of' 'receive' 'when'
 'maybe' 'else'
 'andalso' 'orelse'
+'in'
 'bnot' 'not'
 '*' '/' 'div' 'rem' 'band' 'and'
 '+' '-' 'bor' 'bxor' 'bsl' 'bsr' 'or' 'xor'
@@ -258,6 +259,7 @@ clause_guard -> '$empty' : [].
 clause_body -> '->' clause_body_exprs: '$2'.
 
 expr -> 'catch' expr : {'catch',?anno('$1'),'$2'}.
+expr -> var 'in' expr '..' expr : {in, ?anno('$1'), '$1', '$3', '$5'}.
 expr -> expr '=' expr : {match,first_anno('$1'),'$1','$3'}.
 expr -> expr '!' expr : ?mkop2('$1', '$2', '$3').
 expr -> expr 'orelse' expr : ?mkop2('$1', '$2', '$3').
@@ -2025,6 +2027,7 @@ inop_prec('++') -> {400,300,300};
 inop_prec('--') -> {400,300,300};
 inop_prec('+') -> {400,400,500};
 inop_prec('-') -> {400,400,500};
+inop_prec('in') -> {400,400,500};
 inop_prec('bor') -> {400,400,500};
 inop_prec('bxor') -> {400,400,500};
 inop_prec('bsl') -> {400,400,500};

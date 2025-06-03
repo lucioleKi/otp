@@ -44,7 +44,7 @@
 	 bad_constants/1,bad_guards/1,
          guard_in_catch/1,beam_bool_SUITE/1,
          repeated_type_tests/1,use_after_branch/1,
-         body_in_guard/1]).
+         body_in_guard/1,is_between/1]).
 
 suite() -> [{ct_hooks,[ts_install_cth]}].
 
@@ -63,7 +63,8 @@ groups() ->
        basic_andalso_orelse,traverse_dcd,
        check_qlc_hrl,andalso_semi,t_tuple_size,binary_part,
        bad_constants,bad_guards,guard_in_catch,beam_bool_SUITE,
-       repeated_type_tests,use_after_branch,body_in_guard]},
+       repeated_type_tests,use_after_branch,body_in_guard,
+       is_between]},
      {slow,[],[literal_type_tests,generated_combinations]}].
 
 init_per_suite(Config) ->
@@ -3362,6 +3363,20 @@ body_in_guard(_Config) ->
     after 0 ->
         demonitor(Mon)
     end.
+
+is_between(Config) when is_list(Config) ->
+    {a,1,0} = is_between(1,0),
+    io:format("~p~n", [is_between(1,0)]),
+    io:format("~p~n", [is_between(0,10)]),
+    {b,0,10} = is_between(0,10),
+    {c,10,20} = is_between(10,20).
+
+is_between(X1, X2) when X1 in 1..9 ->
+    {a, X1, X2};
+is_between(X1, X2) when X2 in 10..19 ->
+    {b, X1, X2};
+is_between(X1,X2) ->
+    {c, X1, X2}.
 
 %% Call this function to turn off constant propagation.
 id(I) -> I.

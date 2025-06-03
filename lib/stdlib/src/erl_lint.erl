@@ -2497,6 +2497,9 @@ gexpr({op,Anno,Op,A}, Vt, St0) ->
         true -> {Avt,St1};
         false -> {Avt,add_error(Anno, illegal_guard_expr, St1)}
     end;
+gexpr({'in',_Anno,Var,L,R}, Vt, St0) ->
+    {Avt, St1} = gexpr(Var, Vt, St0),
+    exprs([L,R], Avt, St1);
 gexpr({op,_,'andalso',L,R}, Vt, St) ->
     gexpr_list([L,R], Vt, St);
 gexpr({op,_,'orelse',L,R}, Vt, St) ->
@@ -2606,6 +2609,7 @@ is_gexpr({float,_A,_F}, _Info) -> true;
 is_gexpr({atom,_A,_Atom}, _Info) -> true;
 is_gexpr({string,_A,_S}, _Info) -> true;
 is_gexpr({nil,_A}, _Info) -> true;
+is_gexpr({'in',_A,_Var,_L,_R}, _Info) -> true;
 is_gexpr({cons,_A,H,T}, Info) -> is_gexpr_list([H,T], Info);
 is_gexpr({tuple,_A,Es}, Info) -> is_gexpr_list(Es, Info);
 is_gexpr({map,_A,Es}, Info) ->

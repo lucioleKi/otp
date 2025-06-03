@@ -2306,4 +2306,5 @@ f_reserved_word('bsl') -> true;
 f_reserved_word('bsr') -> true;
 f_reserved_word('or') -> true;
 f_reserved_word('xor') -> true;
+f_reserved_word('in') -> true;
 f_reserved_word(_) -> false.
