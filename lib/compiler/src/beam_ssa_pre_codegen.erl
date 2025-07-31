@@ -116,7 +116,8 @@ functions([], _Ps) -> [].
 
 passes(Opts) ->
     AddPrecgAnnos = proplists:get_bool(dprecg, Opts),
-    BeamDebugInfo = proplists:get_bool(beam_debug_info, Opts),
+    BeamDebugStack = proplists:get_bool(beam_debug_stack, Opts),
+    BeamDebugInfo = BeamDebugStack orelse proplists:get_bool(beam_debug_info, Opts),
 
     Ps = [?PASS(assert_no_critical_edges),
 
@@ -129,6 +130,11 @@ passes(Opts) ->
           case BeamDebugInfo of
               false -> ignore;
               true -> ?PASS(break_out_debug_line)
+          end,
+
+          case BeamDebugStack of
+            false -> ignore;
+            true -> ?PASS(stack_all_vars)
           end,
 
           ?PASS(place_frames),
@@ -1330,6 +1336,84 @@ break_out_debug_line(#st{ssa=Blocks0,cnt=Count0}=St) ->
     {Blocks,Count} = beam_ssa:split_blocks_after(RPO, P, Blocks0, Count0),
 
     St#st{ssa=Blocks,cnt=Count}.
+
+
+%%% 
+%%% This pass is only run when the `beam_debug_stack` option has been given.
+%%% It makes it possible to inspect all variables (except for binaries or
+%%% variables only used in guards). Variables are saved to the stack by
+%%% adding an instruction that refers to them before returns.
+%%% 
+stack_all_vars(#st{ssa=Blocks0,cnt=Count0,args=Args}=St) ->
+    RPO = beam_ssa:rpo(Blocks0),
+    {Blocks1, Count1} = stack_all_vars_is(RPO, Blocks0, Count0,
+                                          #{0 => ordsets:from_list(Args)}),
+    St#st{ssa=Blocks1,cnt=Count1}.
+
+stack_all_vars_is([?EXCEPTION_BLOCK|Ls], Blocks, Count, Defined) ->
+    stack_all_vars_is(Ls, Blocks, Count, Defined);
+stack_all_vars_is([L|Ls], Blocks, Count0, Defined0) ->
+    #b_blk{is=Is0,last=Last} = Blk0 = maps:get(L, Blocks),
+    Defined1 = get_defined(L, Blocks, Defined0),
+    case Defined1 of
+        unreachable -> stack_all_vars_is(Ls, Blocks, Count0, Defined0);
+        #{L := Def} ->
+                {Blk, Count1} = case {reverse(Is0), Last} of
+                    {[#b_set{op=call,dst=Dst0}=I|Prec], #b_ret{}} ->
+                        %% Preserve tail call.
+                        Defined2 = ordsets:del_element(Dst0, Def),
+                        {Dst, Count} = new_var(Count0),
+                        Instr1 = #b_set{op=require_stack,
+                                        args=ordsets:to_list(Defined2),dst=Dst},
+                        {Blk0#b_blk{is=reverse(Prec)++[Instr1,I]}, Count};
+                    {_, #b_ret{}} ->
+                        {Dst, Count} = new_var(Count0),
+                        Instr = #b_set{op=require_stack,
+                                       args=ordsets:to_list(Def),dst=Dst},
+                        {Blk0#b_blk{is=Is0 ++ [Instr]}, Count};
+                    _ ->
+                        {Blk0, Count0}
+                end,
+            stack_all_vars_is(Ls, Blocks#{L:=Blk}, Count1, Defined1)
+    end;
+stack_all_vars_is([], Blocks, Count, _) ->
+    {Blocks, Count}.
+
+%% Calculate all defined variables for the current block.
+get_defined(L, Blocks, Defined0) ->
+    case Defined0 of
+        #{L := Def0} ->
+            Def0 = maps:get(L, Defined0, ordsets:new()),
+            #b_blk{is=Is0} = maps:get(L, Blocks),
+            Def1 = [K || #b_set{dst=#b_var{name=N}=K} <- Is0,
+                         beam_ssa_codegen:is_original_variable(N)],
+            Defined1 = Defined0#{L => ordsets:union(Def0,
+                                                    ordsets:from_list(Def1))},
+            get_defined_next(L, Blocks, Defined1);
+        #{} -> unreachable
+    end.
+
+%% According to defined variables for the current block, calculate variables
+%% that will still be defined for the successors.
+get_defined_next(L, Blocks, Defined0) ->
+    Def0 = maps:get(L, Defined0, ordsets:new()),
+    #b_blk{is=Is0,last=Last} = maps:get(L, Blocks),
+    case {reverse(Is0), Last} of
+        {[#b_set{op=succeeded,args=[Var]}|_], #b_br{succ=Succ,fail=Fail}} ->
+            SuccDef = maps:get(Succ, Defined0, Def0),
+            FailDef = maps:get(Fail, Defined0, Def0),
+            %% The success label has Var as defined. The failure label doesn't.
+            Def1 = ordsets:del_element(Var, Def0),
+            Defined0#{Fail => ordsets:intersection(Def1, FailDef),
+                      Succ => ordsets:intersection(Def0, SuccDef)};
+        _ ->
+            Successors = beam_ssa:successors(maps:get(L, Blocks)),
+            %% All defined vars are carried over to successors.
+            foldl(fun(Lbl, Defined) ->
+                Def = maps:get(Lbl, Defined0, Def0),
+                Defined#{Lbl => ordsets:intersection(Def0, Def)}
+            end, Defined0, Successors)
+    end.
 
 %%%
 %%% Find out where frames should be placed.
@@ -2817,6 +2901,7 @@ use_zreg(nif_start) -> yes;
 use_zreg(recv_marker_bind) -> yes;
 use_zreg(recv_marker_clear) -> yes;
 use_zreg(remove_message) -> yes;
+use_zreg(require_stack) -> yes;
 use_zreg(set_tuple_element) -> yes;
 use_zreg(succeeded) -> yes;
 use_zreg(wait_timeout) -> yes;
