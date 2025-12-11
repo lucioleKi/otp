@@ -2489,8 +2489,6 @@ novars(E0, St0) ->
     {Se,Sps,St2} = force_novars(E1, St1),
     {Se,Eps ++ Sps,St2}.
 
-force_novars(#iapply{}=App, St) -> {App,[],St};
-force_novars(#icall{}=Call, St) -> {Call,[],St};
 force_novars(#ifun{}=Fun, St) -> {Fun,[],St};	%These are novars too
 force_novars(#ibinary{}=Bin, St) -> {Bin,[],St};
 force_novars(#c_map{}=Bin, St) -> {Bin,[],St};
