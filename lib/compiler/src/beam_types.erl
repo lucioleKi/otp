@@ -56,7 +56,7 @@
 
 -export([decode_ext/1, encode_ext/1, convert_ext/2]).
 
--export_type([type/0]).
+-export_type([type/0, normal_type/0]).
 
 -export_record([t_atom, t_bitstring, t_bs_context, t_bs_matchable, t_cons,
                 t_float, t_fun, t_integer, t_list, t_map, t_number,
