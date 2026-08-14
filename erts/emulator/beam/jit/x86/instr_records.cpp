@@ -154,30 +154,93 @@ void BeamModuleAssembler::emit_i_create_local_native_record(
         const ArgWord &Live,
         const ArgWord &size,
         const Span<const ArgVal> &args) {
-    Label next = a.new_label();
+    Eterm def;
+    ErtsRecordDefinition *defp;
+    int field_count;
+    Uint num_words_needed;
+    Eterm *loader_def_values;
+    Eterm cons = beamfile_get_literal(beam, Def.get());
+    Uint argp;
+    bool any_literal_defaults = false;
+    bool otp_29 = beam->code.max_opcode <= genop_get_record_field_5;
 
-    a.mov(ARG1, c_p);
-    load_x_reg_array(ARG2);
-    mov_arg(ARG3, Def);
-    mov_arg(ARG4, Live);
-    mov_imm(ARG5, args.size());
-    embed_vararg_rodata(args, ARG6, 0);
+    def = CAR(list_val(cons));
+    defp = (ErtsRecordDefinition *)tuple_val(def);
+    loader_def_values = tuple_val(CDR(list_val(cons))) + 1;
 
-    emit_enter_runtime<Update::eHeapAlloc | Update::eReductions>();
+    field_count = RECORD_DEF_FIELD_COUNT(defp);
+    num_words_needed = RECORD_INST_SIZE(field_count);
 
-    runtime_call<
-            Eterm (*)(Process *, Eterm *, Eterm, Uint, Uint, const Eterm *),
-            erl_create_local_native_record>();
+    comment("name: %T", defp->name);
 
-    emit_leave_runtime<Update::eHeapAlloc | Update::eReductions>();
+    argp = 0;
+    for (int i = 0; i < field_count; i++) {
+        if (argp < args.size() &&
+            args[argp].as<ArgAtom>().get() == defp->keys[i]) {
+            argp += 2;
+        } else {
+            Eterm value = loader_def_values[i];
+            any_literal_defaults |= !is_immed(value);
+        }
+    }
 
-    emit_test_the_non_value(RET);
-    a.short_().jne(next);
+    if (otp_29) {
+        /* If compiled by OTP 29, we must do a GC test here.
+         * If compiled by OTP 30 or later, this instruction is
+         * preceded by a `test_heap` instruction that has already
+         * ensured sufficient heap space. */
+        emit_gc_test(ArgWord(0), ArgWord(num_words_needed), Live);
+    }
 
-    emit_raise_exception();
+    mov_arg(RET, Def);
+    x86::Gp boxed_ptr = emit_ptr_val(RET, RET);
+    a.mov(ARG2, getCARRef(boxed_ptr));
+    emit_ptr_val(ARG2, ARG2);
 
-    a.bind(next);
-    mov_arg(Dst, RET);
+    if (any_literal_defaults) {
+        a.mov(ARG3, getCDRRef(boxed_ptr));
+        emit_ptr_val(ARG3, ARG3);
+        a.lea(ARG3, x86::qword_ptr(ARG3, sizeof(Eterm) - TAG_PRIMARY_BOXED));
+    }
+
+    a.mov(x86::qword_ptr(HTOP), MAKE_RECORD_HEADER(field_count));
+    a.mov(x86::qword_ptr(HTOP, sizeof(Eterm)), ARG2);
+
+    argp = 0;
+    for (int i = 0; i < field_count; i++) {
+        x86::Mem dst_ptr = x86::qword_ptr(HTOP, (i + 2) * sizeof(Eterm));
+        if (argp < args.size() &&
+            args[argp].as<ArgAtom>().get() == defp->keys[i]) {
+            if (args[argp + 1].isImmed()) {
+                Eterm value = args[argp + 1].as<ArgImmed>().get();
+                a.mov(dst_ptr, imm(value));
+            } else {
+                mov_arg(RET, args[argp + 1]);
+                a.mov(dst_ptr, RET);
+            }
+            argp += 2;
+        } else {
+            Eterm value = loader_def_values[i];
+            if (is_immed(value)) {
+                a.mov(dst_ptr, imm(value));
+            } else {
+                a.mov(RET, x86::qword_ptr(ARG3, i * sizeof(Eterm)));
+                a.mov(dst_ptr, RET);
+            }
+        }
+    }
+    
+    comment("Create boxed ptr");
+    x86::Gp tmp_reg = alloc_temp_reg();
+    preserve_cache(
+            [&]() {
+                a.lea(tmp_reg, x86::qword_ptr(HTOP, TAG_PRIMARY_BOXED));
+                a.add(HTOP, imm(num_words_needed * sizeof(Eterm)));
+            },
+            HTOP,
+            tmp_reg);
+
+    mov_arg(Dst, tmp_reg);
 }
 
 void BeamModuleAssembler::emit_i_create_native_record(
