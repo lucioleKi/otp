@@ -27,8 +27,8 @@
 	 init_per_group/2,end_per_group/2,
          create/1,explicit_module_name/1,
          term_order/1,gc/1,external_term_format/1,
-         messages/1,errors/1,records_module/1, dist/1,
-         gh_11398/1]).
+         messages/1,records_module/1, dist/1,
+         gh_11398/1,lazy_loading/1]).
 
 -record #a{x=1, y=2}.
 -record #b{x=none, y=none, z=none}.
@@ -61,10 +61,10 @@ all() ->
      gc,
      external_term_format,
      messages,
-     errors,
      records_module,
      dist,
-     gh_11398].
+     gh_11398,
+     lazy_loading].
 
 groups() ->
     [].
@@ -95,9 +95,6 @@ do_create() ->
     2 = req(Pid, bump),
 
     true = code:delete(ext_records),
-
-    ?assertError({badrecord,{ext_records,quad}},
-                 #ext_records:quad{a=0, b=1, c=2, d=3}),
 
     3 = req(Pid, bump),
     done = req(Pid, done),
@@ -304,8 +301,8 @@ external_term_format(_Config) ->
     RecA = #a{},
     RecB = #bb{a=RecA,b=lists:seq(1, 10)},
 
-    Local = ext_records:local([1,2,3], {RecA, RecB}),
     Vector = #ext_records:vector{},
+    Local = ext_records:local([1,2,3], {RecA, RecB}),
 
     Records = [RecA, RecB, Vector, Local],
     Bin = term_to_binary(Records),
@@ -323,8 +320,6 @@ external_term_format(_Config) ->
          end || R1 <- Records && R2 <- binary_to_term(Bin)],
 
     true = code:delete(ext_records),
-
-    ?assertError({badrecord,{ext_records,vector}}, #ext_records:vector{}),
 
     _ = [begin
              io:format("~p\n", [R1]),
@@ -387,16 +382,6 @@ echo_loop() ->
             From ! {ok,self(),Msg},
             echo_loop()
     end.
-
-errors(_Config) ->
-    ?assertError({badfield,{{ext_records,quad},qqq}},
-                 #ext_records:quad{qqq=0}),
-    ?assertError({badfield,{{ext_records,quad},true}},
-                 #ext_records:quad{true=0}),
-    ?assertError({badfield,{{ext_records,quad},zzzz}},
-                 #ext_records:quad{zzzz=0}),
-
-    ok.
 
 records_module(_Config) ->
     ARec = id(#a{x=1, y=2}),
@@ -588,6 +573,107 @@ y(A, N) when is_integer(A) ->
         (binary:copy(<<$w, 1, "a">>, N))/bytes,
         (binary:copy(AValue, N))/bytes
     >>.
+
+lazy_loading(_Config) ->
+    Fs = [fun() ->
+                  #ext_records:vector{x=10,y=99,z=5} =
+                      #ext_records:vector{y=99}
+          end,
+          fun() ->
+                  #ext_records:vector{x=100,y=1,z=5} =
+                      tail_vector1()
+          end,
+          fun() ->
+                  {ok,#ext_records:vector{x=10,y=1,z=500}} =
+                      tail_vector2()
+          end,
+          fun() ->
+                  #ext_records:vector{x=777,y=888,z=5} =
+                      tail_vector3(777, 888)
+          end,
+          fun() ->
+                  {ok,#ext_records:vector{x=77,y=88,z=5}} =
+                      tail_vector4(77, 88)
+          end,
+          fun() ->
+                  {ok,#ext_records:vector{x=10,y=517,z=699}} =
+                      frame_vector2(517, 699)
+          end,
+          fun() ->
+                  {ok,#ext_records:vector{x=10,y=21,z=99}} =
+                      frame_vector2(21, 99)
+          end,
+          fun() ->
+                  #ext_records:vector{x=10,y={tuple,17},z=99} =
+                      frame_vector3(17, 99)
+          end,
+          fun() ->
+                  ?assertError({badfield,{{ext_records,vector},a}},
+                               bad_vector1())
+          end,
+          fun() ->
+                  ?assertError({badrecord,{ext_records,bad}},
+                               bad_record1())
+          end,
+          fun() ->
+                  ?assertError({badfield,{{ext_records,quad},qqq}},
+                               #ext_records:quad{qqq=0})
+          end,
+          fun() ->
+                  ?assertError({badfield,{{ext_records,quad},true}},
+                               #ext_records:quad{true=0})
+          end,
+          fun() ->
+                  ?assertError({badfield,{{ext_records,quad},zzzz}},
+                               #ext_records:quad{zzzz=0})
+          end,
+          fun() ->
+                  ?assertError({novalue,{{ext_records,quad},_}},
+                               #ext_records:quad{})
+          end
+         ],
+    _ = [begin
+             _ = code:purge(ext_records),
+             _ = code:delete(ext_records),
+             _ = code:purge(ext_records),
+             %% The module is unloaded.
+             Res = F(),
+
+             %% Now it's loaded.
+             Res = F()
+         end || F <- Fs],
+    ok.
+
+tail_vector1() ->
+    #ext_records:vector{x=100}.
+
+tail_vector2() ->
+    {ok,#ext_records:vector{z=500}}.
+
+tail_vector3(X, Y) ->
+    #ext_records:vector{x=X,y=Y}.
+
+tail_vector4(X, Y) ->
+    {ok,#ext_records:vector{x=X,y=Y}}.
+
+frame_vector1(Y0, Z) ->
+    Y = id(Y0),
+    #ext_records:vector{y=Y,z=Z}.
+
+frame_vector2(Y0, Z) ->
+    Y = id(Y0),
+    {ok,#ext_records:vector{y=Y,z=Z}}.
+
+frame_vector3(Y0, Z) ->
+    Y = {tuple,id(Y0)},
+    #ext_records:vector{y=Y,z=Z}.
+
+bad_vector1() ->
+    #ext_records:vector{a=1}.
+
+bad_record1() ->
+    #ext_records:bad{}.
+
 
 %%% Common utilities.
 
