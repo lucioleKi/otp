@@ -326,8 +326,7 @@ void BeamGlobalAssembler::emit_create_native_record_shared() {
 
         /* Dispatch directly to the trap code. There is no need to do
          * a context switch. */
-        a.mov(RET, x86::qword_ptr(c_p, offsetof(Process, i)));
-        a.jmp(RET);
+        a.jmp(x86::qword_ptr(c_p, offsetof(Process, i)));
     }
 
     align_erlang_cp();

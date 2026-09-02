@@ -429,7 +429,9 @@ Eterm erl_create_native_record_jit(Process* p, Eterm* reg,
     module = tuple_ptr[1];
     name = tuple_ptr[2];
 
-    needed = live + 6 + 2 + 10;
+    /* FIXME: Remoe  fudge factor (10) and re-test.
+    * 6 should probably be 5. */
+    needed = live + 6 + 2 + CP_SIZE + 10;
     if (HeapWordsLeft(p) < needed) {
         erts_garbage_collect(p, needed, reg, live);
     }
