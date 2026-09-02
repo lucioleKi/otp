@@ -47,6 +47,12 @@ extern "C"
 
 #include "beam_jit_common.hpp"
 
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+/* Suppress alignment warnings for `Eterm` in templates. */
+#pragma GCC diagnostic ignored "-Wignored-attributes"
+#endif
+
 /* On Windows, the min and max macros may be defined. */
 #undef min
 #undef max
@@ -1603,6 +1609,21 @@ protected:
         }
     }
 
+    void extract_from_literal(x86::Gp to,
+                              const ArgLiteral &literal,
+                              const std::function<Eterm(Eterm)> &resolve) {
+        auto &deferred = literals[literal.as<ArgLiteral>().get()].deferred;
+
+        const int MOV_IMM64_PAYLOAD_OFFSET = 2;
+        Label lbl = a.new_label();
+
+        a.bind(lbl);
+        a.long_().mov(to, imm(LLONG_MAX));
+
+        deferred.emplace_back(patch{lbl, MOV_IMM64_PAYLOAD_OFFSET, 0},
+                              resolve);
+    }
+
     /* Note: May clear flags. */
     void mov_arg(x86::Gp to, const ArgVal &from, const x86::Gp &spill) {
         if (from.isBytePtr()) {
@@ -1814,3 +1835,7 @@ void *beamasm_metadata_insert(std::string module_name,
                               const std::vector<AsmRange> &ranges);
 void beamasm_metadata_early_init();
 void beamasm_metadata_late_init();
+
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
