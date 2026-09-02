@@ -245,8 +245,8 @@ void BeamModuleAssembler::emit_i_create_local_native_record(
         x86::Mem dst_ptr = x86::qword_ptr(HTOP, (i + 2) * sizeof(Eterm));
         if (argp < args.size() &&
             args[argp].as<ArgAtom>().get() == defp->keys[i]) {
-            if (args[argp + 1].isImmed()) {
-                /* FIXME: Will this work for a value with more than 32 bits? */
+            if (args[argp + 1].isImmed() &&
+                Support::is_int_n<32>((Sint)(args[argp + 1].as<ArgImmed>().get()))) {
                 Eterm value = args[argp + 1].as<ArgImmed>().get();
                 a.mov(dst_ptr, imm(value));
             } else {
@@ -256,8 +256,8 @@ void BeamModuleAssembler::emit_i_create_local_native_record(
             argp += 2;
         } else {
             Eterm value = loader_def_values[i];
-            if (is_immed(value)) {
-                /* FIXME: Will this work for a value with more than 32 bits? */
+            if (is_immed(value) &&
+                Support::is_int_n<32>((Sint)(value))) {
                 a.mov(dst_ptr, imm(value));
             } else {
                 a.mov(RET, x86::qword_ptr(ARG3, i * sizeof(Eterm)));
