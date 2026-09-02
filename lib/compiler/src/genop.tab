@@ -756,7 +756,7 @@ BEAM_FORMAT_NUMBER=0
 ##      extraction fails.
 191: get_record_field/5
 
-## @spec get_local_record_elements_id Fail Id Rec Elements=[FieldName, Register]
+## @spec get_record_elements_id Fail Id Rec Elements=[FieldName, Register]
 ## @doc Extract the values for each field name and store into the
 ##      corresponding register.
 ##
