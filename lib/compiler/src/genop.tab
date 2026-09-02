@@ -733,7 +733,7 @@ BEAM_FORMAT_NUMBER=0
 ##      register. Jump to label if any field name is not in the native record.
 188: get_record_elements/3
 
-## @spec put_record_elements Lbl Id Src Dst Live Updates
+## @spec put_record Lbl Id Src Dst Live Updates
 ## @doc Create (Src is nil) or update (Src is a register) a native record.
 ##      Fail with an exception if creation/update fails. (Lbl is reserved
 ##      for potential future release; it must be 0.)
