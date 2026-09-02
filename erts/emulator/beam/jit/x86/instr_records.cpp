@@ -198,6 +198,10 @@ void BeamModuleAssembler::emit_i_create_local_native_record(
 
     comment("name: %T", defp->name);
 
+    /* Find out whether we have any literal values in default
+     * values. */
+    /* FIXME: Also consider whether any of the literal values are
+     * overwritten. */
     argp = 0;
     for (int i = 0; i < field_count; i++) {
         if (argp < args.size() &&
@@ -217,12 +221,17 @@ void BeamModuleAssembler::emit_i_create_local_native_record(
         emit_gc_test(ArgWord(0), ArgWord(num_words_needed), Live);
     }
 
+    /* Pick up pointer to definition cons. */
     mov_arg(RET, Def);
     x86::Gp boxed_ptr = emit_ptr_val(RET, RET);
+
+    /* Pick up tagged pointer to ErlDefinition struct. */
     a.mov(ARG2, getCARRef(boxed_ptr));
     emit_ptr_val(ARG2, ARG2);
 
     if (any_literal_defaults) {
+        /* Pick up pointer to the literal for the default value
+         * array. */
         a.mov(ARG3, getCDRRef(boxed_ptr));
         emit_ptr_val(ARG3, ARG3);
         a.lea(ARG3, x86::qword_ptr(ARG3, sizeof(Eterm) - TAG_PRIMARY_BOXED));
@@ -237,6 +246,7 @@ void BeamModuleAssembler::emit_i_create_local_native_record(
         if (argp < args.size() &&
             args[argp].as<ArgAtom>().get() == defp->keys[i]) {
             if (args[argp + 1].isImmed()) {
+                /* FIXME: Will this work for a value with more than 32 bits? */
                 Eterm value = args[argp + 1].as<ArgImmed>().get();
                 a.mov(dst_ptr, imm(value));
             } else {
@@ -247,6 +257,7 @@ void BeamModuleAssembler::emit_i_create_local_native_record(
         } else {
             Eterm value = loader_def_values[i];
             if (is_immed(value)) {
+                /* FIXME: Will this work for a value with more than 32 bits? */
                 a.mov(dst_ptr, imm(value));
             } else {
                 a.mov(RET, x86::qword_ptr(ARG3, i * sizeof(Eterm)));
