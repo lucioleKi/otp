@@ -221,24 +221,12 @@ void BeamModuleAssembler::emit_i_create_local_native_record(
         emit_gc_test(ArgWord(0), ArgWord(num_words_needed), Live);
     }
 
-    /* Pick up pointer to definition cons. */
-    mov_arg(RET, Def);
-    x86::Gp boxed_ptr = emit_ptr_val(RET, RET);
-
-    /* Pick up tagged pointer to ErlDefinition struct. */
-    a.mov(ARG2, getCARRef(boxed_ptr));
-    emit_ptr_val(ARG2, ARG2);
-
-    if (any_literal_defaults) {
-        /* Pick up pointer to the literal for the default value
-         * array. */
-        a.mov(ARG3, getCDRRef(boxed_ptr));
-        emit_ptr_val(ARG3, ARG3);
-        a.lea(ARG3, x86::qword_ptr(ARG3, sizeof(Eterm) - TAG_PRIMARY_BOXED));
-    }
+    extract_from_literal(RET, Def, [](Eterm value) -> Eterm {
+        return CAR(list_val(value));
+    });
 
     a.mov(x86::qword_ptr(HTOP), MAKE_RECORD_HEADER(field_count));
-    a.mov(x86::qword_ptr(HTOP, sizeof(Eterm)), ARG2);
+    a.mov(x86::qword_ptr(HTOP, sizeof(Eterm)), RET);
 
     argp = 0;
     for (int i = 0; i < field_count; i++) {
@@ -260,7 +248,11 @@ void BeamModuleAssembler::emit_i_create_local_native_record(
                 Support::is_int_n<32>((Sint)(value))) {
                 a.mov(dst_ptr, imm(value));
             } else {
-                a.mov(RET, x86::qword_ptr(ARG3, i * sizeof(Eterm)));
+                extract_from_literal(RET, Def, [i](Eterm value) -> Eterm {
+                    auto defaults = CDR(list_val(value));
+                    return tuple_val(defaults)[i+1];
+                });
+
                 a.mov(dst_ptr, RET);
             }
         }
