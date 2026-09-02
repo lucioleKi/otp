@@ -360,8 +360,8 @@ opt_records([], Acc) -> reverse(Acc).
 simplify_get_record_elements_id(Fail, Id, Src, {list,[Key,Dst]},
                                 [{get_record_elements_id,
                                   Fail,Id,Src,{list,List1}}|Acc]) ->
-    case not is_reg_overwritten(Src, List1) andalso
-        not is_reg_overwritten(Dst, List1) of
+    case (not is_reg_overwritten(Src, List1) andalso
+	  not is_reg_overwritten(Dst, List1)) of
         true ->
             case member(Key, List1) of
                 true ->
