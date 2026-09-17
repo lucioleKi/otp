@@ -1458,6 +1458,34 @@ BIF_RETTYPE term_to_binary_1(BIF_ALIST_1)
     }
 }
 
+BIF_RETTYPE pid_to_binary_1(BIF_ALIST_1)
+{
+    if (is_not_pid(BIF_ARG_1))
+	BIF_ERROR(BIF_P, BADARG);
+    BIF_RET(erts_term_to_binary_int(BIF_P, BIF_pid_to_binary_1,
+                                    BIF_ARG_1, am_undefined,
+                                    0, TERM_TO_BINARY_DFLAGS, NULL, 0, ~((Uint) 0)));
+}
+
+BIF_RETTYPE port_to_binary_1(BIF_ALIST_1)
+{
+    if (is_not_port(BIF_ARG_1))
+	BIF_ERROR(BIF_P, BADARG);
+    BIF_RET(erts_term_to_binary_int(BIF_P, BIF_port_to_binary_1,
+                                    BIF_ARG_1, am_undefined,
+                                    0, TERM_TO_BINARY_DFLAGS, NULL, 0, ~((Uint) 0)));
+}
+
+BIF_RETTYPE ref_to_binary_1(BIF_ALIST_1)
+{
+    if (is_not_ref(BIF_ARG_1))
+        BIF_ERROR(BIF_P, BADARG);
+    erts_magic_ref_save_bin(BIF_ARG_1);
+    BIF_RET(erts_term_to_binary_int(BIF_P, BIF_ref_to_binary_1,
+                                    BIF_ARG_1, am_undefined,
+                                    0, TERM_TO_BINARY_DFLAGS, NULL, 0, ~((Uint) 0)));
+}
+
 BIF_RETTYPE term_to_iovec_1(BIF_ALIST_1)
 {
     Eterm res = erts_term_to_binary_int(BIF_P, BIF_term_to_iovec_1,

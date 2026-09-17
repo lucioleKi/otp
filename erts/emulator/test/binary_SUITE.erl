@@ -82,6 +82,9 @@
          t2b_system_limit/1,
          term_to_iovec/1,
          is_binary_test/1,
+         pid_to_binary_test/1,
+         pid_to_binary_test/1,
+         pid_to_binary_test/1,
          local_ext/1]).
 
 %% Internal exports.
@@ -113,6 +116,7 @@ all() ->
      robustness, otp_8180, trapping, large,
      error_after_yield, cmp_old_impl,
      is_binary_test,
+     pid_to_binary_test, pid_to_binary_test, pid_to_binary_test,
      local_ext].
 
 groups() -> 
@@ -2208,6 +2212,73 @@ concat_stuff(A, B) when is_integer(B); is_binary(B) ->
            Y when is_binary(Y) -> Y;
            _ -> integer_to_binary(B)
        end)/binary>>.
+
+%% Test the pid_to_binary/1 BIF
+pid_to_binary_test(Config) when is_list(Config) ->
+    LocalPid = self(),
+    LocalBin = pid_to_binary(LocalPid),
+    true = is_binary(LocalBin),
+    LocalPid = binary_to_term(LocalBin),
+
+    %% A freshly spawned pid also round-trips.
+    OtherPid = spawn(fun() -> receive stop -> ok end end),
+    OtherBin = pid_to_binary(OtherPid),
+    OtherPid = binary_to_term(OtherBin),
+    OtherPid ! stop,
+
+    %% The produced binary must be a valid external term with the version tag.
+    <<131, _/binary>> = LocalBin,
+
+    %% Non-pid arguments raise badarg.
+    ?assertError(badarg, pid_to_binary(an_atom)),
+    ?assertError(badarg, pid_to_binary(make_ref())),
+    ?assertError(badarg, pid_to_binary(42)),
+    ?assertError(badarg, pid_to_binary(<<"not a pid">>)),
+    ok.
+
+%% Test the port_to_binary/1 BIF
+port_to_binary_test(Config) when is_list(Config) ->
+    Port = open_port({spawn, "false"}, [eof]),
+    try
+        Bin = port_to_binary(Port),
+        true = is_binary(Bin),
+        Port = binary_to_term(Bin),
+
+        %% The produced binary must be a valid external term with the version tag.
+        <<131, _/binary>> = Bin
+    after
+        catch port_close(Port)
+    end,
+
+    %% Non-port arguments raise badarg.
+    ?assertError(badarg, port_to_binary(an_atom)),
+    ?assertError(badarg, port_to_binary(self())),
+    ?assertError(badarg, port_to_binary(make_ref())),
+    ?assertError(badarg, port_to_binary(42)),
+    ok.
+
+%% Test the ref_to_binary/1 BIF
+ref_to_binary_test(Config) when is_list(Config) ->
+    Ref = make_ref(),
+    Bin = ref_to_binary(Ref),
+    true = is_binary(Bin),
+    Ref = binary_to_term(Bin),
+
+    %% Two distinct references yield distinct binaries.
+    Ref2 = make_ref(),
+    Bin2 = ref_to_binary(Ref2),
+    true = Bin =/= Bin2,
+    Ref2 = binary_to_term(Bin2),
+
+    %% The produced binary must be a valid external term with the version tag.
+    <<131, _/binary>> = Bin,
+
+    %% Non-reference arguments raise badarg.
+    ?assertError(badarg, ref_to_binary(an_atom)),
+    ?assertError(badarg, ref_to_binary(self())),
+    ?assertError(badarg, ref_to_binary(42)),
+    ?assertError(badarg, ref_to_binary(<<"not a ref">>)),
+    ok.
 
 %% Utilities.
 
