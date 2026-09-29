@@ -2703,9 +2703,10 @@ make_ssa_function(Anno, Name, As, Body, St) ->
 
 cg_fun(Ke, St0) ->
     {FailIs,St1} = make_exception_block(St0),
-    {B,St} = cg(Ke, St1),
+    {B,St2} = cg(Ke, St1),
     Asm0 = [{label,0}|B++FailIs],
-    Asm = fix_phis(Asm0),
+    Asm1 = fix_phis(Asm0),
+    {Asm,St} = rewrite_br(Asm1, St2),
     {build_map(Asm),St}.
 
 make_exception_block(St0) ->
@@ -3670,6 +3671,27 @@ find_loc([{file,File}|T], _, Line) ->
 find_loc([_|T], File, Line) ->
     find_loc(T, File, Line);
 find_loc([], File, Line) -> {File,Line}.
+
+
+rewrite_br(Is, St) ->
+    rewrite_br_1(Is, [], St).
+
+rewrite_br_1([{label,Lbl},#b_set{op={bif,Op},dst=Dst}=I,#b_ret{arg=Dst},{label,Fail}|Is],
+             Acc, St0) when Op =:= '=:='; Op =:= '=/=' ->
+    {EqL, St1} = new_label(St0),
+    {NeqL, St2} = new_label(St1),
+    True = #b_literal{val=true},
+    False = #b_literal{val=false},
+    Sw = #b_switch{arg=Dst,fail=Fail,list=[{True,EqL},{False,NeqL}]},
+    NewIs = [{label, Lbl}, I, Sw,
+             {label, EqL}, #b_ret{arg=True},
+             {label, NeqL}, #b_ret{arg=False},
+             {label, Fail}],
+    rewrite_br_1(Is, lists:reverse(NewIs)++Acc, St2);
+rewrite_br_1([I|Is], Acc, St) ->
+    rewrite_br_1(Is, [I|Acc], St);
+rewrite_br_1([], Acc, St) ->
+    {lists:reverse(Acc), St}.
 
 %% fix_phis(Is0) -> Is.
 %%  Rewrite #cg_break{} and #cg_phi{} records to #b_set{} records.
