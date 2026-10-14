@@ -1816,3 +1816,308 @@ void BeamModuleAssembler::emit_i_bsl(const ArgSource &LHS,
     a.bind(next);
     mov_arg(Dst, RET);
 }
+
+template<typename T, T Func>
+void BeamGlobalAssembler::emit_bitops_body(const ErtsCodeMFA *bif_mfa) {
+    Label error = a.new_label();
+
+    emit_enter_frame();
+    emit_enter_runtime<Update::eReductions>();
+
+    /* Save original arguments for the error path. */
+    a.mov(TMP_MEM1q, ARG1);
+
+    runtime_call<T, Func>();
+
+    emit_leave_runtime<Update::eReductions>();
+    emit_leave_frame();
+
+    emit_test_the_non_value(RET);
+    a.short_().je(error);
+    a.ret();
+
+    a.bind(error);
+    {
+        /* Place the original argument in x0. */
+        a.mov(ARG1, TMP_MEM1q);
+        a.mov(getXRef(0), ARG1);
+
+        a.mov(ARG4, imm(&bif_mfa));
+        a.jmp(labels[raise_exception]);
+    }
+}
+
+template<typename T, T Func>
+void BeamGlobalAssembler::emit_bitops_guard() {
+    emit_enter_frame();
+    emit_enter_runtime<Update::eReductions>();
+
+    /* ARG1 was set by the caller */
+    runtime_call<T, Func>();
+
+    emit_leave_runtime<Update::eReductions>();
+    emit_leave_frame();
+
+    /* Set ZF if op failed. */
+    emit_test_the_non_value(RET);
+    a.ret();
+}
+
+void BeamGlobalAssembler::emit_i_ctz_guard_shared() {
+    emit_bitops_guard<Eterm (*)(Eterm),
+                                erts_ctz>();
+}
+
+void BeamGlobalAssembler::emit_i_ctz_body_shared() {
+    static const ErtsCodeMFA bif_mfa = {am_erlang, am_integer_trailing_zeroes, 1};
+    emit_bitops_body<Eterm (*)(Eterm), erts_ctz>(&bif_mfa);
+}
+
+void BeamModuleAssembler::emit_i_ctz(const ArgLabel &Fail,
+                                     const ArgSource &Src,
+                                     const ArgRegister &Dst) {
+    Label generic = a.new_label(), next = a.new_label();
+
+    /* The shared fragments read the original term from ARG1. It must stay
+     * live on every path that reaches `generic`. */
+    mov_arg(ARG1, Src);
+
+    if (!Src.isSmall()) {
+        /* 0 is an error case. */
+        a.cmp(ARG1, imm(_TAG_IMMED1_SMALL));
+        a.short_().je(generic);
+
+        if (!always_small(Src)) {
+            a.mov(ARG2, ARG1);
+            a.and_(ARG2, imm(_TAG_IMMED1_MASK));
+            a.cmp(ARG2, imm(_TAG_IMMED1_SMALL));
+            a.short_().jne(generic);
+        }
+
+        /* Untag the value. */
+        a.mov(ARG2, ARG1);
+        a.sar(ARG2, imm(_TAG_IMMED1_SIZE));
+
+        /* `tzcnt` and `bsf` has the same behaviour except for the 0 case. */
+        if (hasCpuFeature(CpuFeatures::X86::kBMI)) {
+            a.tzcnt(RET, ARG2);
+        } else {
+            a.bsf(RET, ARG2);
+        }
+
+        /* make_small(RET) */
+        a.shl(RET, imm(_TAG_IMMED1_SIZE));
+        a.or_(RET, imm(_TAG_IMMED1_SMALL));
+        a.short_().jmp(next);
+    }
+
+    a.bind(generic);
+    /* Bignum and error cases go through the runtime function */
+    if (Fail.get() != 0) {
+        safe_fragment_call(ga->get_i_ctz_guard_shared());
+        a.je(resolve_beam_label(Fail));
+    } else {
+        safe_fragment_call(ga->get_i_ctz_body_shared());
+    }
+
+    a.bind(next);
+    mov_arg(Dst, RET);
+}
+
+void BeamGlobalAssembler::emit_i_popcount_guard_shared() {
+    emit_bitops_guard<Eterm (*)(Eterm),
+                                erts_popcount>();
+}
+
+void BeamGlobalAssembler::emit_i_popcount_body_shared() {
+    static const ErtsCodeMFA bif_mfa = {am_erlang, am_integer_set_bits, 1};
+    emit_bitops_body<Eterm (*)(Eterm), erts_popcount>(&bif_mfa);
+}
+
+void BeamModuleAssembler::emit_i_popcount(const ArgLabel &Fail,
+                                     const ArgSource &Src,
+                                     const ArgRegister &Dst) {
+    Label generic = a.new_label(), next = a.new_label();
+
+    /* The shared fragments read the original term from ARG1. It must stay
+     * live on every path that reaches `generic`. */
+    mov_arg(ARG1, Src);
+
+    if (!Src.isSmall() && hasCpuFeature(CpuFeatures::X86::kPOPCNT)) {
+        if (!always_small(Src)) {
+            a.mov(ARG2, ARG1);
+            a.and_(ARG2, imm(_TAG_IMMED1_MASK));
+            a.cmp(ARG2, imm(_TAG_IMMED1_SMALL));
+            a.short_().jne(generic);
+        }
+
+        /* Untag the value. */
+        a.mov(ARG2, ARG1);
+        a.sar(ARG2, imm(_TAG_IMMED1_SIZE));
+
+        /* Reject negative integers, then do popcnt. */
+        a.test(ARG2, ARG2);
+        a.short_().js(generic);
+        a.popcnt(RET, ARG2);
+
+        /* make_small(RET) */
+        a.shl(RET, imm(_TAG_IMMED1_SIZE));
+        a.or_(RET, imm(_TAG_IMMED1_SMALL));
+        a.short_().jmp(next);
+    }
+
+    a.bind(generic);
+    /* Bignum and error cases go through the runtime function */
+    if (Fail.get() != 0) {
+        safe_fragment_call(ga->get_i_popcount_guard_shared());
+        a.je(resolve_beam_label(Fail));
+    } else {
+        safe_fragment_call(ga->get_i_popcount_body_shared());
+    }
+
+    a.bind(next);
+    mov_arg(Dst, RET);
+}
+
+void BeamGlobalAssembler::emit_i_unsigned_width_guard_shared() {
+    emit_bitops_guard<Eterm (*)(Eterm),
+                                erts_unsigned_width>();
+}
+
+void BeamGlobalAssembler::emit_i_unsigned_width_body_shared() {
+    static const ErtsCodeMFA bif_mfa = {am_erlang, am_integer_unsigned_width, 1};
+    emit_bitops_body<Eterm (*)(Eterm), erts_unsigned_width>(&bif_mfa);
+}
+
+void BeamModuleAssembler::emit_i_unsigned_width(const ArgLabel &Fail,
+                                                const ArgSource &Src,
+                                                const ArgRegister &Dst) {
+    Label generic = a.new_label(), next = a.new_label(), zero = a.new_label();
+
+    /* The shared fragments read the original term from ARG1. It must stay
+     * live on every path that reaches `generic`. */
+    mov_arg(ARG1, Src);
+
+    if (!Src.isSmall()) {
+        if (!always_small(Src)) {
+            a.mov(ARG2, ARG1);
+            a.and_(ARG2, imm(_TAG_IMMED1_MASK));
+            a.cmp(ARG2, imm(_TAG_IMMED1_SMALL));
+            a.short_().jne(generic);
+        }
+
+        /* Untag the value. */
+        a.mov(ARG2, ARG1);
+        a.sar(ARG2, imm(_TAG_IMMED1_SIZE));
+
+        /* Negatives are error cases. 0 is a special case. */
+        a.test(ARG2, ARG2);
+        a.short_().je(zero);
+        a.short_().js(generic);
+
+        if (hasCpuFeature(CpuFeatures::X86::kLZCNT)) {
+            a.lzcnt(RET, ARG2);
+            a.neg(RET);
+            a.add(RET, imm(64));
+        } else {
+            a.bsr(RET, ARG2);
+            a.add(RET, imm(1));
+        }
+
+        /* make_small(RET) */
+        a.shl(RET, imm(_TAG_IMMED1_SIZE));
+        a.or_(RET, imm(_TAG_IMMED1_SMALL));
+        a.short_().jmp(next);
+
+        a.bind(zero);
+        mov_imm(RET, make_small(0));
+        a.short_().jmp(next);
+    }
+
+    a.bind(generic);
+    /* Bignum and error cases go through the runtime function */
+    if (Fail.get() != 0) {
+        safe_fragment_call(ga->get_i_unsigned_width_guard_shared());
+        a.je(resolve_beam_label(Fail));
+    } else {
+        safe_fragment_call(ga->get_i_unsigned_width_body_shared());
+    }
+
+    a.bind(next);
+    mov_arg(Dst, RET);
+}
+
+void BeamGlobalAssembler::emit_i_signed_width_guard_shared() {
+    emit_bitops_guard<Eterm (*)(Eterm),
+                                erts_signed_width>();
+}
+
+void BeamGlobalAssembler::emit_i_signed_width_body_shared() {
+    static const ErtsCodeMFA bif_mfa = {am_erlang, am_integer_signed_width, 1};
+    emit_bitops_body<Eterm (*)(Eterm), erts_signed_width>(&bif_mfa);
+}
+
+void BeamModuleAssembler::emit_i_signed_width(const ArgLabel &Fail,
+                                              const ArgSource &Src,
+                                              const ArgRegister &Dst) {
+    Label generic = a.new_label(), next = a.new_label(), zero = a.new_label(),
+    not_neg_pow2 = a.new_label(), cont = a.new_label();
+
+    /* The shared fragments read the original term from ARG1. It must stay
+     * live on every path that reaches `generic`. */
+    mov_arg(ARG1, Src);
+
+    if (!Src.isSmall()) {
+        if (!always_small(Src)) {
+            a.mov(ARG2, ARG1);
+            a.and_(ARG2, imm(_TAG_IMMED1_MASK));
+            a.cmp(ARG2, imm(_TAG_IMMED1_SMALL));
+            a.short_().jne(generic);
+        }
+
+        /* Untag the value. */
+        a.mov(ARG2, ARG1);
+        a.sar(ARG2, imm(_TAG_IMMED1_SIZE));
+
+        a.bsr(RET, ARG2);
+
+        /* If the value is negative and a power of 2, add 1 to bsr result.
+        Otherwise, add 2. */
+        a.test(ARG2, ARG2);
+        a.short_().je(zero);
+        a.short_().jns(not_neg_pow2);
+
+        a.neg(ARG2);
+        a.lea(ARG3, x86::qword_ptr(ARG2, -1));
+        a.test(ARG2, ARG3);
+        a.short_().jne(not_neg_pow2);
+
+        a.add(RET, imm(1));
+        a.short_().jmp(cont);
+
+        a.bind(not_neg_pow2);
+        a.add(RET, imm(2));
+
+        /* make_small(RET) */
+        a.bind(cont);
+        a.shl(RET, imm(_TAG_IMMED1_SIZE));
+        a.or_(RET, imm(_TAG_IMMED1_SMALL));
+        a.short_().jmp(next);
+
+        a.bind(zero);
+        mov_imm(RET, make_small(1));
+        a.short_().jmp(next);
+    }
+
+    a.bind(generic);
+    /* Bignum and error cases go through the runtime function */
+    if (Fail.get() != 0) {
+        safe_fragment_call(ga->get_i_signed_width_guard_shared());
+        a.je(resolve_beam_label(Fail));
+    } else {
+        safe_fragment_call(ga->get_i_signed_width_body_shared());
+    }
+
+    a.bind(next);
+    mov_arg(Dst, RET);
+}

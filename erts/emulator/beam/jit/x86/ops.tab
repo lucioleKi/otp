@@ -1376,3 +1376,25 @@ get_record_field Fail BadRecord=c Mod Name Dst =>
     move BadRecord x | get_record_field Fail x Mod Name Dst
 
 get_record_field j xy c a d
+
+#
+# BIFs integer_trailing_zeroes/1, integer_set_bits/1,
+# integer_unsigned_width/1, integer_signed_width/1 are instructions
+#
+
+bif1 Fail _Bif=u$bif:erlang:integer_trailing_zeroes/1 Src=d Dst=d =>
+    i_ctz Fail Src Dst
+
+bif1 Fail _Bif=u$bif:erlang:integer_set_bits/1 Src=d Dst=d =>
+    i_popcount Fail Src Dst
+
+bif1 Fail _Bif=u$bif:erlang:integer_unsigned_width/1 Src=d Dst=d =>
+    i_unsigned_width Fail Src Dst
+
+bif1 Fail _Bif=u$bif:erlang:integer_signed_width/1 Src=d Dst=d =>
+    i_signed_width Fail Src Dst
+
+i_ctz j s d
+i_popcount j s d
+i_unsigned_width j s d
+i_signed_width j s d
