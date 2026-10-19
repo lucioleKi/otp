@@ -1886,11 +1886,22 @@ void BeamModuleAssembler::emit_i_ctz(const ArgLabel &Fail,
     /* The shared fragments read the original term from ARG1. It must stay
      * live on every path that reaches `generic`. */
     mov_arg(ARG1, Src);
+
+    /* Clear the tag iff input is small. */
     a.xor_(ARG1, imm(_TAG_IMMED1_SMALL));
+    /* 0 is an error case. */
     a.short_().jz(generic);
     a.bsf(RET, ARG1);
-    a.sub(RET, imm(4));
+
+    /* If input is small, subtract for the extra 0s in the tag bits.
+     * 0 after subtraction means the input is an odd number.
+     * If input is not small, tag bits have at least 1 bit set after xor.
+     * bsf returns a count below _TAG_IMMED1_SIZE.
+     * After subtraction, result falls below 0. Go to error case.
+     */
+    a.sub(RET, imm(_TAG_IMMED1_SIZE));
     a.short_().jl(generic);
+
     /* make_small(RET) */
     a.shl(RET, imm(_TAG_IMMED1_SIZE));
     a.or_(RET, imm(_TAG_IMMED1_SMALL));
@@ -1911,6 +1922,8 @@ void BeamModuleAssembler::emit_i_ctz(const ArgLabel &Fail,
 }
 
 void BeamGlobalAssembler::emit_i_popcount_guard_shared() {
+    /* The module code only clears the tag when it has a POPCNT instruction
+     * to use. */
     if (hasCpuFeature(CpuFeatures::X86::kPOPCNT)) {
         a.xor_(ARG1, imm(_TAG_IMMED1_SMALL));
     }
@@ -1936,11 +1949,17 @@ void BeamModuleAssembler::emit_i_popcount(const ArgLabel &Fail,
     mov_arg(ARG1, Src);
 
     if (hasCpuFeature(CpuFeatures::X86::kPOPCNT)) {
+        /* Clear the tag iff input is small. */
         a.xor_(ARG1, imm(_TAG_IMMED1_SMALL));
+        /* Error case for negative integers. */
         a.short_().js(generic);
         a.popcnt(RET, ARG1);
+
+        /* make_small(RET) */
         a.shl(RET, imm(_TAG_IMMED1_SIZE));
         a.or_(RET, imm(_TAG_IMMED1_SMALL));
+
+        /* Type test for small. */
         a.test(ARG1, imm(_TAG_IMMED1_SMALL));
         a.short_().jz(next);
     }
@@ -1959,6 +1978,7 @@ void BeamModuleAssembler::emit_i_popcount(const ArgLabel &Fail,
 }
 
 void BeamGlobalAssembler::emit_i_unsigned_width_guard_shared() {
+    /* Undo the modifications done by the module code. */
     a.xor_(ARG1, imm(_TAG_IMMED1_SMALL << 1));
     a.ror(ARG1, imm(1));
     emit_bitops_guard<Eterm (*)(Eterm),
@@ -1981,11 +2001,19 @@ void BeamModuleAssembler::emit_i_unsigned_width(const ArgLabel &Fail,
      * live on every path that reaches `generic`. */
     mov_arg(ARG1, Src);
 
+    /* Compute unsigned width on the tagged term. Subtract for the width
+     * of tag bits.
+     */
     a.bsr(RET, ARG1);
-    a.sub(RET, imm(3));
+    a.sub(RET, imm(_TAG_IMMED1_SIZE - 1));
+
+    /* make_small(RET) */
     a.shl(RET, imm(_TAG_IMMED1_SIZE));
     a.or_(RET, imm(_TAG_IMMED1_SMALL));
 
+    /* Rotating left by one makes the lowest _TAG_IMMED1_SIZE + 1 bits
+     * all 1 iff input is small. After XOR, ZF is set iff input is small.
+     */
     a.rol(ARG1, imm(1));
     a.xor_(ARG1, imm(_TAG_IMMED1_SMALL << 1));
     a.test(ARG1, imm((_TAG_IMMED1_SMALL << 1) | 1));
@@ -2022,17 +2050,27 @@ void BeamModuleAssembler::emit_i_signed_width(const ArgLabel &Fail,
      * live on every path that reaches `generic`. */
     mov_arg(ARG1, Src);
 
+    /* Set ARG2 to the sign bit. Invert the payload bits if the
+     * term is negative, leaving the tag alone. 
+     * Once inverted, both signs can be measured the same way.
+     */
     a.mov(ARG2, ARG1);
     a.sar(ARG2, imm(63));
     a.and_(ARG2, imm(~_TAG_IMMED1_MASK));
     a.mov(RET, ARG1);
     a.xor_(RET, ARG2);
-    a.bsr(RET, RET);
-    a.sub(RET, imm(2));
 
+    /* The signed width is the unsigned width of the (possibly inverted)
+     * payload plus one for the sign bit.
+     */
+    a.bsr(RET, RET);
+    a.sub(RET, imm(_TAG_IMMED1_SIZE - 2));
+
+    /* make_small(RET) */
     a.shl(RET, imm(_TAG_IMMED1_SIZE));
     a.or_(RET, imm(_TAG_IMMED1_SMALL));
 
+    /* Type test for small. */
     if (always_small(Src)) {
         comment("skipped small test because the operand is always small");
         a.short_().jmp(next);
