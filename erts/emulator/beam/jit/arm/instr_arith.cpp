@@ -1769,3 +1769,79 @@ void BeamModuleAssembler::emit_i_bsl(const ArgLabel &Fail,
 
     a.bind(next);
 }
+
+template<typename T, T Func>
+void BeamGlobalAssembler::emit_bitops_body(const ErtsCodeMFA *bif_mfa) {
+    Label error = a.new_label();
+
+    /* Save original arguments for the error path. */
+    a.str(ARG1, TMP_MEM1q);
+
+    emit_enter_runtime_frame();
+
+    runtime_call<T, Func>();
+
+    emit_leave_runtime_frame();
+
+    emit_branch_if_not_value(ARG1, error);
+    a.ret(a64::x30);
+
+    a.bind(error);
+    {
+        emit_leave_runtime(0);
+        /* Place the original argument in x0. */
+        a.ldr(XREG0, TMP_MEM1q);
+
+        /* Need to set up freason here. */
+        mov_imm(TMP1, EXC_BADARG);
+        a.str(TMP1, a64::Mem(c_p, offsetof(Process, freason)));
+
+        mov_imm(ARG4, bif_mfa);
+        a.b(labels[raise_exception]);
+    }
+}
+
+void BeamGlobalAssembler::emit_i_ctz_body_shared() {
+    static const ErtsCodeMFA bif_mfa = {am_erlang, am_integer_trailing_zeroes, 1};
+    emit_bitops_body<Eterm (*)(Eterm), erts_ctz>(&bif_mfa);
+}
+
+void BeamModuleAssembler::emit_i_ctz(const ArgLabel &Fail,
+                                     const ArgSource &Src,
+                                     const ArgRegister &Dst) {
+    Label generic = a.new_label(), next = a.new_label();
+
+    auto src = load_source(Src, ARG1);
+    auto dst = init_destination(Dst, ARG1);
+
+    a.eor(TMP1, src.reg, imm(_TAG_IMMED1_SMALL));
+    a.cbz(TMP1, generic);
+    a.rbit(TMP1, TMP1);
+    a.clz(TMP1, TMP1);
+    a.subs(TMP1, TMP1, imm(4));
+    a.b_mi(generic);
+    /* make_small(TMP1) */
+    a.lsl(TMP1, TMP1, imm(_TAG_IMMED1_SIZE));
+    a.orr(dst.reg, TMP1, imm(_TAG_IMMED1_SMALL));
+    flush_var(dst);
+    a.b(next);
+
+
+    a.bind(generic);
+    mov_var(ARG1, src);
+    /* Bignum and error cases go through the runtime function */
+    if (Fail.get() != 0) {
+        emit_enter_runtime<Update::eReductions>();
+        runtime_call<Eterm (*)(Eterm), erts_ctz>();
+        emit_leave_runtime<Update::eReductions>();
+        emit_branch_if_not_value(ARG1, resolve_beam_label(Fail, dispUnknown));
+    } else {
+        emit_enter_runtime<Update::eReductions>();
+        fragment_call(ga->get_i_ctz_body_shared());
+        emit_leave_runtime<Update::eReductions>();
+    }
+
+    mov_var(dst, ARG1);
+    flush_var(dst);
+    a.bind(next);
+}
